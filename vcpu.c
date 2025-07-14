@@ -166,7 +166,7 @@ vcpu_t *vcpu_create(mem_pool_t *mem_pool)
 
   if (vcpu == NULL)
   {
-    PRINT_INFO("Failed to allocate VCPU structure\n");
+    PRINTF("Failed to allocate VCPU structure\n");
     return NULL;
   }
   vcpu->mem_pool = mem_pool;
@@ -178,24 +178,24 @@ int vcpu_init(vcpu_t *vcpu)
 {
   if (!check_cpu_big_page_feature())
   {
-    PRINT_INFO("CPU does not support 1GB pages\n");
+    PRINTF("CPU does not support 1GB pages\n");
     return -1;
   }
   if (vcpu_setup_host_stack(vcpu) != 0)
   {
-    PRINT_INFO("Failed to setup host stack\n");
+    PRINTF("Failed to setup host stack\n");
     return -1;
   }
 
   if (vcpu_setup_host_gdt(vcpu) != 0)
   {
-    PRINT_INFO("Failed to setup host GDT\n");
+    PRINTF("Failed to setup host GDT\n");
     return -1;
   }
 
   if (vcpu_setup_host_identity_pml4(vcpu) != 0)
   {
-    PRINT_INFO("Failed to setup host identity PML4\n");
+    PRINTF("Failed to setup host identity PML4\n");
     return -1;
   }
   return 0;
@@ -203,24 +203,24 @@ int vcpu_init(vcpu_t *vcpu)
 
 void vcpu_dump_regs(vcpu_t *vcpu)
 {
-  PRINT_DEBUG("GUEST REGISTERS DUMP\n");
-  PRINT_DEBUG("RIP: 0x%x\n", vcpu->regs.rip);
-  PRINT_DEBUG("RSP: 0x%x\n", vcpu->regs.rsp);
-  PRINT_DEBUG("RAX: 0x%x\n", vcpu->regs.rax);
-  PRINT_DEBUG("RCX: 0x%x\n", vcpu->regs.rcx);
-  PRINT_DEBUG("RDX: 0x%x\n", vcpu->regs.rdx);
-  PRINT_DEBUG("RBX: 0x%x\n", vcpu->regs.rbx);
-  PRINT_DEBUG("RBP: 0x%x\n", vcpu->regs.rbp);
-  PRINT_DEBUG("RSI: 0x%x\n", vcpu->regs.rsi);
-  PRINT_DEBUG("RDI: 0x%x\n", vcpu->regs.rdi);
-  PRINT_DEBUG("R8: 0x%x\n", vcpu->regs.r8);
-  PRINT_DEBUG("R9: 0x%x\n", vcpu->regs.r9);
-  PRINT_DEBUG("R10: 0x%x\n", vcpu->regs.r10);
-  PRINT_DEBUG("R11: 0x%x\n", vcpu->regs.r11);
-  PRINT_DEBUG("R12: 0x%x\n", vcpu->regs.r12);
-  PRINT_DEBUG("R13: 0x%x\n", vcpu->regs.r13);
-  PRINT_DEBUG("R14: 0x%x\n", vcpu->regs.r14);
-  PRINT_DEBUG("R15: 0x%x\n\n", vcpu->regs.r15);
+  PRINTF("GUEST REGISTERS DUMP\n");
+  PRINTF("RIP: 0x%x\n", vcpu->regs.rip);
+  PRINTF("RSP: 0x%x\n", vcpu->regs.rsp);
+  PRINTF("RAX: 0x%x\n", vcpu->regs.rax);
+  PRINTF("RCX: 0x%x\n", vcpu->regs.rcx);
+  PRINTF("RDX: 0x%x\n", vcpu->regs.rdx);
+  PRINTF("RBX: 0x%x\n", vcpu->regs.rbx);
+  PRINTF("RBP: 0x%x\n", vcpu->regs.rbp);
+  PRINTF("RSI: 0x%x\n", vcpu->regs.rsi);
+  PRINTF("RDI: 0x%x\n", vcpu->regs.rdi);
+  PRINTF("R8: 0x%x\n", vcpu->regs.r8);
+  PRINTF("R9: 0x%x\n", vcpu->regs.r9);
+  PRINTF("R10: 0x%x\n", vcpu->regs.r10);
+  PRINTF("R11: 0x%x\n", vcpu->regs.r11);
+  PRINTF("R12: 0x%x\n", vcpu->regs.r12);
+  PRINTF("R13: 0x%x\n", vcpu->regs.r13);
+  PRINTF("R14: 0x%x\n", vcpu->regs.r14);
+  PRINTF("R15: 0x%x\n\n", vcpu->regs.r15);
 }
 
 void vcpu_host_push(vcpu_t *vcpu, uint64_t value)
@@ -229,17 +229,15 @@ void vcpu_host_push(vcpu_t *vcpu, uint64_t value)
   *(uint64_t *)vcpu->host_rsp = value;
 }
 
-void vcpu_emulate_cpuid(vcpu_t *vcpu, int instruction_len)
+void vcpu_emulate_cpuid(regs_t *regs)
 {
-  cpuid_wrapper(&vcpu->regs.rax, &vcpu->regs.rcx,
-                &vcpu->regs.rdx, &vcpu->regs.rbx);
-  vcpu->regs.rip += instruction_len;
+  cpuid_wrapper(&regs->rax, &regs->rcx,
+                &regs->rdx, &regs->rbx);
 }
 
-void vcpu_emulate_invd(vcpu_t *vcpu, int instruction_len)
+void vcpu_emulate_invd(regs_t *regs)
 {
   wbinvd_wrapper();
-  vcpu->regs.rip += instruction_len;
 }
 
 static void enable_os_xsave()
@@ -249,9 +247,44 @@ static void enable_os_xsave()
   write_cr4(cr4);
 }
 
-void vcpu_emulate_xsetbv(vcpu_t *vcpu, int instruction_len)
+void vcpu_emulate_xsetbv(regs_t *regs)
 {
   enable_os_xsave();
-  xsetbv_wrapper(vcpu->regs.rcx, vcpu->regs.rax, vcpu->regs.rdx);
-  vcpu->regs.rip += instruction_len;
+  xsetbv_wrapper(regs->rcx, regs->rax, regs->rdx);
+}
+
+static uint64_t get_extended_model_id()
+{
+  uint64_t rax = 0x1, rcx = 0, rdx, rbx;
+  cpuid_wrapper(&rax, &rcx, &rdx, &rbx);
+  return (rax >> 16) & 0xf;
+}
+
+void vcpu_emulate_init(regs_t *regs)
+{
+  uint64_t extended_model_id = get_extended_model_id();
+  regs->rax = 0;
+  regs->rcx = 0;
+  regs->rdx = 0;
+  regs->rbx = 0x600 | (extended_model_id << 16);
+  regs->rbp = 0;
+  regs->rsi = 0;
+  regs->rdi = 0;
+  regs->r8 = 0;
+  regs->r9 = 0;
+  regs->r10 = 0;
+  regs->r11 = 0;
+  regs->r12 = 0;
+  regs->r13 = 0;
+  regs->r14 = 0;
+  regs->r15 = 0;
+  regs->rip = 0xfff0;
+  regs->rsp = 0;
+
+  write_cr2(0);
+  write_dr0(0);
+  write_dr1(0);
+  write_dr2(0);
+  write_dr3(0);
+  write_dr6(0xffff0ff0);
 }

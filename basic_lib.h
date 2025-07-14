@@ -22,8 +22,8 @@ mem_pool_t *mem_pool_create(void *pool, uintptr_t size);
 void *mem_pool_alloc(mem_pool_t *mem_pool, uintptr_t size, uintptr_t alignment);
 
 #define DEBUG_SERIAL_PORT 0x3f8
-#define PRINT_INFO(fmt, ...) serial_print(fmt, ##__VA_ARGS__)
-#define PRINT_DEBUG(fmt, ...) // serial_print(fmt, ##__VA_ARGS__)
+#define PRINTF(fmt, ...) serial_print(fmt, ##__VA_ARGS__)
+// #define PRINT_DEBUG(fmt, ...) // serial_print(fmt, ##__VA_ARGS__)
 
 void serial_print(const char *fmt, ...);
 
@@ -38,12 +38,12 @@ static inline void bitmap_setbit(uint8_t *bits, uint32_t index)
       ;         \
   }
 
-#define ASSERT(expression)              \
-  {                                     \
-    if (!(expression))                  \
-    {                                   \
-      PRINT_INFO("Assertion failed:"    \
-                 " " #expression "\n"); \
-      PANIC()                           \
-    }                                   \
+#define ASSERT(expression)          \
+  {                                 \
+    if (!(expression))              \
+    {                               \
+      PRINTF("Assertion failed:"    \
+             " " #expression "\n"); \
+      PANIC()                       \
+    }                               \
   }

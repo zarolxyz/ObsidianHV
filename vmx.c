@@ -28,7 +28,7 @@ uint64_t vmx_ajust_cr4(uint64_t value)
   return value;
 }
 
-static int msr_bitmap_set_read(msr_bitmap_t *msr_bitmap, uint32_t index)
+int msr_bitmap_set_read(msr_bitmap_t *msr_bitmap, uint32_t index)
 {
   if (!is_valid_msr(index))
     return -1;
@@ -46,7 +46,7 @@ static int msr_bitmap_set_read(msr_bitmap_t *msr_bitmap, uint32_t index)
   return 0;
 }
 
-static int msr_bitmap_set_write(msr_bitmap_t *msr_bitmap, uint32_t index)
+int msr_bitmap_set_write(msr_bitmap_t *msr_bitmap, uint32_t index)
 {
   if (!is_valid_msr(index))
     return -1;
@@ -64,7 +64,7 @@ static int msr_bitmap_set_write(msr_bitmap_t *msr_bitmap, uint32_t index)
   return 0;
 }
 
-static void init_msr_bitmap(msr_bitmap_t *msr_bitmap)
+void init_msr_bitmap(msr_bitmap_t *msr_bitmap)
 {
   zero_mem(msr_bitmap, sizeof(msr_bitmap_t));
 }
@@ -76,7 +76,7 @@ vmx_cpu_t *vmx_create_cpu(mem_pool_t *mem_pool)
 
   if (vcpu == NULL || vmx_cpu == NULL)
   {
-    PRINT_INFO("Failed to allocate VMX CPU structure\n");
+    PRINTF("Failed to allocate VMX CPU structure\n");
     return NULL;
   }
   vmx_cpu->vcpu = vcpu;
@@ -94,7 +94,7 @@ int vmx_init(vmx_cpu_t *vmx_cpu)
       vmx_cpu->vmcs_region == NULL ||
       vmx_cpu->msr_bitmap == NULL)
   {
-    PRINT_INFO("Failed to allocate VMX region\n");
+    PRINTF("Failed to allocate VMX region\n");
     return -1;
   }
   return 0;
@@ -144,7 +144,7 @@ static uint32_t vmx_convert_access_rights(uint32_t access_rights)
 
 int vmx_setup_vmcs(vmx_cpu_t *vmx_cpu)
 {
-  PRINT_DEBUG("Setup VMCS...\n");
+  PRINTF("Setup VMCS...\n");
   int error = 0;
   error |= vmwrite(VMCS_LINK_POINTER, UINT64_MAX); // 禁用VMCS链接
   error |= vmwrite(VMCS_LINK_POINTER_HIGH, UINT64_MAX);
@@ -255,7 +255,7 @@ int vmx_setup_vmcs(vmx_cpu_t *vmx_cpu)
 
   error |= vmwrite(HOST_CR0, cr0);
   error |= vmwrite(HOST_CR3, (uint64_t)vmx_cpu->vcpu->host_pml4);
-  error |= vmwrite(HOST_CR4, cr4 & ~CR4_VMXE_MASK);
+  error |= vmwrite(HOST_CR4, cr4);
 
   error |= vmwrite(HOST_CS_SELECTOR, HOST_GDT_CS & 0xfff8);
   error |= vmwrite(HOST_DS_SELECTOR, 0);
@@ -275,7 +275,7 @@ int vmx_setup_vmcs(vmx_cpu_t *vmx_cpu)
   error |= vmwrite(HOST_IDTR_BASE, UINT64_MAX);
 
   error |= vmwrite(CR0_READ_SHADOW, cr0);
-  error |= vmwrite(CR4_READ_SHADOW, cr4);
+  error |= vmwrite(CR4_READ_SHADOW, cr4 & ~CR4_VMXE_MASK);
 
   error |= vmwrite(HOST_RSP, (uint64_t)vmx_cpu->vcpu->host_rsp);
   error |= vmwrite(HOST_RIP, (uint64_t)vmx_get_exit_handler());
@@ -287,24 +287,24 @@ int vmx_setup_vmcs(vmx_cpu_t *vmx_cpu)
 
 int vmx_enter_root(vmx_cpu_t *vmx_cpu)
 {
-  PRINT_DEBUG("Enter VMX root operation mode...\n");
+  PRINTF("Enter VMX root operation mode...\n");
 
   uint64_t vmx_basic = read_msr(MSR_IA32_VMX_BASIC);
   uint64_t feature_control = read_msr(MSR_IA32_FEATURE_CONTROL);
 
   if (!vmx_check_cpuid())
   {
-    PRINT_INFO("CPU does not support Intel virtualization features\n");
+    PRINTF("CPU does not support Intel virtualization features\n");
     return -1;
   }
   if (!(vmx_basic & VMX_BASIC_TRUE_CONTROLS))
   {
-    PRINT_INFO("CPU does not support VMX true controls\n");
+    PRINTF("CPU does not support VMX true controls\n");
     return -1;
   }
   if (!(feature_control & IA32_FEATURE_CONTROL_MSR_ENABLE_VMXON_OUTSIDE_SMX))
   {
-    PRINT_INFO(
+    PRINTF(
         "CPU virtualization is locked\n");
     return -1;
   }
@@ -324,21 +324,21 @@ int vmx_enter_root(vmx_cpu_t *vmx_cpu)
   uint64_t addr = (uint64_t)(vmx_cpu->vmxon_region);
   if (vmxon(&addr) != 0)
   {
-    PRINT_INFO("Failed to enter VMX operation mode\n");
+    PRINTF("Failed to enter VMX operation mode\n");
     return -1;
   }
   addr = (uint64_t)(vmx_cpu->vmcs_region);
   if (vmclear(&addr) != 0)
   {
     vmxoff();
-    PRINT_INFO("Failed to clear VMCS\n");
+    PRINTF("Failed to clear VMCS\n");
     return -1;
   }
   addr = (uint64_t)(vmx_cpu->vmcs_region);
   if (vmptrld(&addr) != 0)
   {
     vmxoff();
-    PRINT_INFO("Failed to load VMCS\n");
+    PRINTF("Failed to load VMCS\n");
     return -1;
   }
   return 0;
@@ -355,7 +355,7 @@ int vmx_setup(vmx_cpu_t *vmx_cpu)
   if (vmx_setup_vmcs(vmx_cpu) != 0)
   {
     vmxoff();
-    PRINT_INFO("Failed to setup VMCS\n");
+    PRINTF("Failed to setup VMCS\n");
     return -1;
   }
   return 0;
@@ -365,116 +365,123 @@ void vmx_dump_host_state(void)
 {
   uint64_t value = 0;
   vmread(HOST_CR0, &value);
-  PRINT_DEBUG("HOST CR0: %x\n", value);
+  PRINTF("HOST CR0: %x\n", value);
   vmread(HOST_CR3, &value);
-  PRINT_DEBUG("HOST CR3: %x\n", value);
+  PRINTF("HOST CR3: %x\n", value);
   vmread(HOST_CR4, &value);
-  PRINT_DEBUG("HOST CR4: %x\n", value);
+  PRINTF("HOST CR4: %x\n", value);
   vmread(HOST_RSP, &value);
-  PRINT_DEBUG("HOST RSP: %x\n", value);
+  PRINTF("HOST RSP: %x\n", value);
   vmread(HOST_RIP, &value);
-  PRINT_DEBUG("HOST RIP: %x\n", value);
+  PRINTF("HOST RIP: %x\n", value);
   vmread(HOST_CS_SELECTOR, &value);
-  PRINT_DEBUG("HOST CS: %x\n", value);
+  PRINTF("HOST CS: %x\n", value);
   vmread(HOST_ES_SELECTOR, &value);
-  PRINT_DEBUG("HOST ES: %x\n", value);
+  PRINTF("HOST ES: %x\n", value);
   vmread(HOST_SS_SELECTOR, &value);
-  PRINT_DEBUG("HOST SS: %x\n", value);
+  PRINTF("HOST SS: %x\n", value);
   vmread(HOST_DS_SELECTOR, &value);
-  PRINT_DEBUG("HOST DS: %x\n", value);
+  PRINTF("HOST DS: %x\n", value);
   vmread(HOST_FS_SELECTOR, &value);
-  PRINT_DEBUG("HOST FS: %x\n", value);
+  PRINTF("HOST FS: %x\n", value);
   vmread(HOST_GS_SELECTOR, &value);
-  PRINT_DEBUG("HOST GS: %x\n", value);
+  PRINTF("HOST GS: %x\n", value);
   vmread(HOST_TR_SELECTOR, &value);
-  PRINT_DEBUG("HOST TR: %x\n", value);
+  PRINTF("HOST TR: %x\n", value);
   vmread(HOST_FS_BASE, &value);
-  PRINT_DEBUG("HOST FS BASE: %x\n", value);
+  PRINTF("HOST FS BASE: %x\n", value);
   vmread(HOST_GS_BASE, &value);
-  PRINT_DEBUG("HOST GS BASE: %x\n", value);
+  PRINTF("HOST GS BASE: %x\n", value);
   vmread(HOST_TR_BASE, &value);
-  PRINT_DEBUG("HOST TR BASE: %x\n", value);
+  PRINTF("HOST TR BASE: %x\n", value);
   vmread(HOST_GDTR_BASE, &value);
-  PRINT_DEBUG("HOST GDTR BASE: %x\n", value);
+  PRINTF("HOST GDTR BASE: %x\n", value);
   vmread(HOST_IDTR_BASE, &value);
-  PRINT_DEBUG("HOST IDTR BASE: %x\n", value);
+  PRINTF("HOST IDTR BASE: %x\n", value);
 }
 
 void vmx_dump_guest_state(void)
 {
   uint64_t value = 0;
   vmread(GUEST_CR0, &value);
-  PRINT_DEBUG("GUEST CR0: %x\n", value);
+  PRINTF("GUEST CR0: %x\n", value);
   vmread(GUEST_CR3, &value);
-  PRINT_DEBUG("GUEST CR3: %x\n", value);
+  PRINTF("GUEST CR3: %x\n", value);
   vmread(GUEST_CR4, &value);
-  PRINT_DEBUG("GUEST CR4: %x\n", value);
+  PRINTF("GUEST CR4: %x\n", value);
   vmread(GUEST_RSP, &value);
-  PRINT_DEBUG("GUEST RSP: %x\n", value);
+  PRINTF("GUEST RSP: %x\n", value);
   vmread(GUEST_RIP, &value);
-  PRINT_DEBUG("GUEST RIP: %x\n", value);
+  PRINTF("GUEST RIP: %x\n", value);
   vmread(GUEST_RFLAGS, &value);
-  PRINT_DEBUG("GUEST RFLAGS: %x\n", value);
+  PRINTF("GUEST RFLAGS: %x\n", value);
   vmread(GUEST_CS_SELECTOR, &value);
-  PRINT_DEBUG("GUEST CS: %x\n", value);
+  PRINTF("GUEST CS: %x\n", value);
   vmread(GUEST_ES_SELECTOR, &value);
-  PRINT_DEBUG("GUEST ES: %x\n", value);
+  PRINTF("GUEST ES: %x\n", value);
   vmread(GUEST_SS_SELECTOR, &value);
-  PRINT_DEBUG("GUEST SS: %x\n", value);
+  PRINTF("GUEST SS: %x\n", value);
   vmread(GUEST_DS_SELECTOR, &value);
-  PRINT_DEBUG("GUEST DS: %x\n", value);
+  PRINTF("GUEST DS: %x\n", value);
   vmread(GUEST_FS_SELECTOR, &value);
-  PRINT_DEBUG("GUEST FS: %x\n", value);
+  PRINTF("GUEST FS: %x\n", value);
   vmread(GUEST_GS_SELECTOR, &value);
-  PRINT_DEBUG("GUEST GS: %x\n", value);
+  PRINTF("GUEST GS: %x\n", value);
   vmread(GUEST_TR_SELECTOR, &value);
-  PRINT_DEBUG("GUEST TR: %x\n", value);
+  PRINTF("GUEST TR: %x\n", value);
   vmread(GUEST_CS_BASE, &value);
-  PRINT_DEBUG("GUEST CS BASE: %x\n", value);
+  PRINTF("GUEST CS BASE: %x\n", value);
   vmread(GUEST_ES_BASE, &value);
-  PRINT_DEBUG("GUEST ES BASE: %x\n", value);
+  PRINTF("GUEST ES BASE: %x\n", value);
   vmread(GUEST_SS_BASE, &value);
-  PRINT_DEBUG("GUEST SS BASE: %x\n", value);
+  PRINTF("GUEST SS BASE: %x\n", value);
   vmread(GUEST_DS_BASE, &value);
-  PRINT_DEBUG("GUEST DS BASE: %x\n", value);
+  PRINTF("GUEST DS BASE: %x\n", value);
   vmread(GUEST_FS_BASE, &value);
-  PRINT_DEBUG("GUEST FS BASE: %x\n", value);
+  PRINTF("GUEST FS BASE: %x\n", value);
   vmread(GUEST_GS_BASE, &value);
-  PRINT_DEBUG("GUEST GS BASE: %x\n", value);
+  PRINTF("GUEST GS BASE: %x\n", value);
   vmread(GUEST_GDTR_BASE, &value);
-  PRINT_DEBUG("GUEST GDTR BASE: %x\n", value);
+  PRINTF("GUEST GDTR BASE: %x\n", value);
   vmread(GUEST_IDTR_BASE, &value);
-  PRINT_DEBUG("GUEST IDTR BASE: %x\n", value);
+  PRINTF("GUEST IDTR BASE: %x\n", value);
   vmread(GUEST_TR_BASE, &value);
-  PRINT_DEBUG("GUEST TR BASE: %x\n", value);
+  PRINTF("GUEST TR BASE: %x\n", value);
   vmread(GUEST_CS_LIMIT, &value);
-  PRINT_DEBUG("GUEST CS LIMIT: %x\n", value);
+  PRINTF("GUEST CS LIMIT: %x\n", value);
   vmread(GUEST_ES_LIMIT, &value);
-  PRINT_DEBUG("GUEST ES LIMIT: %x\n", value);
+  PRINTF("GUEST ES LIMIT: %x\n", value);
   vmread(GUEST_SS_LIMIT, &value);
-  PRINT_DEBUG("GUEST SS LIMIT: %x\n", value);
+  PRINTF("GUEST SS LIMIT: %x\n", value);
   vmread(GUEST_DS_LIMIT, &value);
-  PRINT_DEBUG("GUEST DS LIMIT: %x\n", value);
+  PRINTF("GUEST DS LIMIT: %x\n", value);
   vmread(GUEST_FS_LIMIT, &value);
-  PRINT_DEBUG("GUEST FS LIMIT: %x\n", value);
+  PRINTF("GUEST FS LIMIT: %x\n", value);
   vmread(GUEST_GS_LIMIT, &value);
-  PRINT_DEBUG("GUEST GS LIMIT: %x\n", value);
+  PRINTF("GUEST GS LIMIT: %x\n", value);
   vmread(GUEST_TR_LIMIT, &value);
-  PRINT_DEBUG("GUEST TR LIMIT: %x\n", value);
+  PRINTF("GUEST TR LIMIT: %x\n", value);
   vmread(GUEST_CS_AR_BYTES, &value);
-  PRINT_DEBUG("GUEST CS AR_BYTES: %x\n", value);
+  PRINTF("GUEST CS AR_BYTES: %x\n", value);
   vmread(GUEST_ES_AR_BYTES, &value);
-  PRINT_DEBUG("GUEST ES AR_BYTES: %x\n", value);
+  PRINTF("GUEST ES AR_BYTES: %x\n", value);
   vmread(GUEST_SS_AR_BYTES, &value);
-  PRINT_DEBUG("GUEST SS AR_BYTES: %x\n", value);
+  PRINTF("GUEST SS AR_BYTES: %x\n", value);
   vmread(GUEST_DS_AR_BYTES, &value);
-  PRINT_DEBUG("GUEST DS AR_BYTES: %x\n", value);
+  PRINTF("GUEST DS AR_BYTES: %x\n", value);
   vmread(GUEST_FS_AR_BYTES, &value);
-  PRINT_DEBUG("GUEST FS AR_BYTES: %x\n", value);
+  PRINTF("GUEST FS AR_BYTES: %x\n", value);
   vmread(GUEST_GS_AR_BYTES, &value);
-  PRINT_DEBUG("GUEST GS AR_BYTES: %x\n", value);
+  PRINTF("GUEST GS AR_BYTES: %x\n", value);
   vmread(GUEST_TR_AR_BYTES, &value);
-  PRINT_DEBUG("GUEST TR AR_BYTES: %x\n", value);
+  PRINTF("GUEST TR AR_BYTES: %x\n", value);
+}
+
+uint64_t vmx_get_instruction_error_code(void)
+{
+  uint64_t value = 0;
+  ASSERT(vmread(VM_INSTRUCTION_ERROR, &value) == 0);
+  return value;
 }
 
 int vmx_inject_interruption(int type, int vector)
@@ -497,6 +504,16 @@ int vmx_inject_interruption_error_code(int type, int vector, uint32_t error_code
   return vmwrite(VM_ENTRY_INTR_INFO_FIELD, info.all) | vmwrite(VM_ENTRY_EXCEPTION_ERROR_CODE, error_code);
 }
 
+static void advance_rip()
+{
+  uint64_t instruction_len = 0;
+  ASSERT(vmread(VM_EXIT_INSTRUCTION_LEN, &instruction_len) == 0);
+  uint64_t rip = 0;
+  ASSERT(vmread(GUEST_RIP, &rip) == 0);
+  rip += instruction_len;
+  ASSERT(vmwrite(GUEST_RIP, rip) == 0);
+}
+
 static void inject_ud()
 {
   ASSERT(vmx_inject_interruption(VMX_INTR_TYPE_HWEXCEPTION, EXCEPTION_UD) == 0);
@@ -507,57 +524,137 @@ static void inject_gp(uint32_t error_code)
   ASSERT(vmx_inject_interruption_error_code(VMX_INTR_TYPE_HWEXCEPTION, EXCEPTION_GP, error_code) == 0);
 }
 
-static void emulate_rdmsr(vcpu_t *vcpu, uint64_t instruction_len)
+static void emulate_rdmsr(regs_t *regs)
 {
-  if (!is_valid_msr(vcpu->regs.rcx))
+  if (!is_valid_msr(regs->rcx))
   {
-    PRINT_DEBUG("Invalid MSR access: %x\n", vcpu->regs.rcx);
+    PRINTF("Invalid MSR access: %x\n", regs->rcx);
     inject_gp(0);
     return;
   }
-  uint64_t value = read_msr(vcpu->regs.rcx);
-  if (vcpu->regs.rcx == MSR_IA32_FEATURE_CONTROL)
+  uint64_t value = read_msr(regs->rcx);
+  if (regs->rcx == MSR_IA32_FEATURE_CONTROL)
   {
     value &= IA32_FEATURE_CONTROL_MSR_LOCK;
     value &= ~(IA32_FEATURE_CONTROL_MSR_ENABLE_VMXON_OUTSIDE_SMX);
   }
-  vcpu->regs.rax = value >> 32;
-  vcpu->regs.rdx = value & 0xffffffff;
-  vcpu->regs.rip += instruction_len;
+  regs->rax = value >> 32;
+  regs->rdx = value & 0xffffffff;
+  advance_rip();
 }
 
-static void emulate_wrmsr(vcpu_t *vcpu, uint64_t instruction_len)
+static void emulate_wrmsr(regs_t *regs)
 {
-  if (!is_valid_msr(vcpu->regs.rcx))
+  if (!is_valid_msr(regs->rcx))
   {
-    PRINT_DEBUG("Invalid MSR access: %x\n", vcpu->regs.rcx);
+    PRINTF("Invalid MSR access: %x\n", regs->rcx);
     inject_gp(0);
     return;
   }
-  uint64_t value = vcpu->regs.rax << 32 | vcpu->regs.rdx;
-  write_msr(vcpu->regs.rcx, value);
-  vcpu->regs.rip += instruction_len;
+  uint64_t value = regs->rax << 32 | regs->rdx;
+  write_msr(regs->rcx, value);
+  advance_rip();
+}
+
+static void emulate_init(regs_t *regs)
+{
+  int error = 0;
+
+  error |= vmwrite(CR0_READ_SHADOW, 0x10);
+  error |= vmwrite(GUEST_CR3, 0);
+  error |= vmwrite(GUEST_CR4, 0);
+  error |= vmwrite(CR4_READ_SHADOW, 0);
+
+  error |= vmwrite(GUEST_CR0, vmx_ajust_cr0(0x10));
+  error |= vmwrite(GUEST_CR4, vmx_ajust_cr4(0));
+
+  error |= vmwrite(GUEST_CS_SELECTOR, 0xf000);
+  error |= vmwrite(GUEST_CS_BASE, 0xffff0000);
+  error |= vmwrite(GUEST_CS_LIMIT, 0xffff);
+  error |= vmwrite(GUEST_CS_AR_BYTES, 0x9b);
+  error |= vmwrite(GUEST_SS_SELECTOR, 0);
+  error |= vmwrite(GUEST_SS_BASE, 0);
+  error |= vmwrite(GUEST_SS_LIMIT, 0xffff);
+  error |= vmwrite(GUEST_SS_AR_BYTES, 0x93);
+  error |= vmwrite(GUEST_DS_SELECTOR, 0);
+  error |= vmwrite(GUEST_DS_BASE, 0);
+  error |= vmwrite(GUEST_DS_LIMIT, 0xffff);
+  error |= vmwrite(GUEST_DS_AR_BYTES, 0x93);
+  error |= vmwrite(GUEST_ES_SELECTOR, 0);
+  error |= vmwrite(GUEST_ES_BASE, 0);
+  error |= vmwrite(GUEST_ES_LIMIT, 0xffff);
+  error |= vmwrite(GUEST_ES_AR_BYTES, 0x93);
+  error |= vmwrite(GUEST_FS_SELECTOR, 0);
+  error |= vmwrite(GUEST_FS_BASE, 0);
+  error |= vmwrite(GUEST_FS_LIMIT, 0xffff);
+  error |= vmwrite(GUEST_FS_AR_BYTES, 0x93);
+  error |= vmwrite(GUEST_GS_SELECTOR, 0);
+  error |= vmwrite(GUEST_GS_BASE, 0);
+  error |= vmwrite(GUEST_GS_LIMIT, 0xffff);
+  error |= vmwrite(GUEST_GS_AR_BYTES, 0x93);
+  error |= vmwrite(GUEST_TR_SELECTOR, 0);
+  error |= vmwrite(GUEST_TR_BASE, 0);
+  error |= vmwrite(GUEST_TR_LIMIT, 0xffff);
+  error |= vmwrite(GUEST_TR_AR_BYTES, 0x8b);
+  error |= vmwrite(GUEST_LDTR_SELECTOR, 0);
+  error |= vmwrite(GUEST_LDTR_BASE, 0);
+  error |= vmwrite(GUEST_LDTR_LIMIT, 0xffff);
+  error |= vmwrite(GUEST_LDTR_AR_BYTES, 0x82);
+
+  error |= vmwrite(GUEST_GDTR_BASE, 0);
+  error |= vmwrite(GUEST_GDTR_LIMIT, 0xffff);
+  error |= vmwrite(GUEST_IDTR_BASE, 0);
+  error |= vmwrite(GUEST_IDTR_LIMIT, 0xffff);
+
+  error |= vmwrite(GUEST_DR7, 0x400);
+
+  uint64_t entry_control = 0;
+  error |= vmread(VM_ENTRY_CONTROLS, &entry_control);
+  entry_control &= ~VM_ENTRY_IA32E_MODE_GUEST;
+  error |= vmwrite(VM_ENTRY_CONTROLS, entry_control);
+
+  ASSERT(error == 0);
+
+  vcpu_emulate_init(regs);
+  error |= vmwrite(GUEST_RFLAGS, 2);
+  error |= vmwrite(GUEST_RIP, regs->rip);
+  error |= vmwrite(GUEST_RSP, regs->rsp);
+
+  error |= vmwrite(GUEST_ACTIVITY_STATE, GUEST_ACTIVITY_WAIT_SIPI);
+
+  ASSERT(error == 0);
+}
+
+static void emulate_sipi()
+{
+  uint64_t vector = 0;
+  ASSERT(vmread(EXIT_QUALIFICATION, &vector) == 0);
+  ASSERT(vmwrite(GUEST_CS_SELECTOR, vector << 8) == 0);
+  ASSERT(vmwrite(GUEST_CS_BASE, vector << 12) == 0);
+  ASSERT(vmwrite(GUEST_RIP, 0) == 0);
+  ASSERT(vmwrite(GUEST_ACTIVITY_STATE, GUEST_ACTIVITY_ACTIVE) == 0);
 }
 
 void vmx_exit_handler(vmx_cpu_t *vmx_cpu)
 {
   vcpu_t *vcpu = vmx_cpu->vcpu;
+  regs_t *regs = &vcpu->regs;
   uint64_t exit_reason = 0;
-  uint64_t instruction_len = 0;
   ASSERT(vmread(VM_EXIT_REASON, &exit_reason) == 0);
-  PRINT_DEBUG("VM_EXIT_REASON: 0x%x\n", exit_reason);
-  ASSERT(vmread(GUEST_RIP, &vcpu->regs.rip) == 0);
-  ASSERT(vmread(VM_EXIT_INSTRUCTION_LEN, &instruction_len) == 0);
+  PRINTF("VM_EXIT_REASON: 0x%x\n", exit_reason);
   switch (exit_reason)
   {
   case EXIT_REASON_INVD:
-    vcpu_emulate_invd(vcpu, instruction_len);
+    vcpu_emulate_invd(regs);
+    advance_rip();
     break;
   case EXIT_REASON_CPUID:
-    vcpu_emulate_cpuid(vcpu, instruction_len);
+    vcpu_emulate_cpuid(regs);
+    advance_rip();
     break;
   case EXIT_REASON_XSETBV:
-    vcpu_emulate_xsetbv(vcpu, instruction_len);
+    vcpu_emulate_xsetbv(regs);
+    advance_rip();
     break;
   case EXIT_REASON_VMCALL:
   case EXIT_REASON_VMCLEAR:
@@ -572,20 +669,25 @@ void vmx_exit_handler(vmx_cpu_t *vmx_cpu)
     inject_ud();
     break;
   case EXIT_REASON_MSR_READ:
-    emulate_rdmsr(vcpu, instruction_len);
+    emulate_rdmsr(regs);
     break;
   case EXIT_REASON_MSR_WRITE:
-    emulate_wrmsr(vcpu, instruction_len);
+    emulate_wrmsr(regs);
+    break;
+  case EXIT_REASON_INIT:
+    emulate_init(regs);
+    break;
+  case EXIT_REASON_SIPI:
+    emulate_sipi();
     break;
   default:
-    PRINT_INFO("Unhandled VM EXIT: 0x%x\n", exit_reason);
+    PRINTF("Unhandled VM EXIT: 0x%x\n", exit_reason);
     goto err;
     break;
   }
-  ASSERT(vmwrite(GUEST_RIP, vcpu->regs.rip) == 0);
-  PRINT_DEBUG("VM EXIT handled successfully\n");
+  PRINTF("VM EXIT handled successfully\n");
   return;
 err:
-  PRINT_INFO("Failed to handle VM EXIT\n");
+  PRINTF("Failed to handle VM EXIT\n");
   PANIC();
 }

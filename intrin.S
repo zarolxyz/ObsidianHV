@@ -16,6 +16,11 @@ read_cr2:
     mov rax, cr2              # 缺页地址寄存器
     ret
 
+.global write_cr2
+write_cr2:
+    mov cr2, rdi              # 缺页地址寄存器
+    ret
+
 .global read_cr3
 read_cr3:
     mov rax, cr3              # 页目录基址寄存器

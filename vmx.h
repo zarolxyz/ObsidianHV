@@ -440,6 +440,11 @@ typedef union
 #define VMX_INTR_TYPE_PRIV_SWEXCEPTION 6 // 特权软件异常
 #define VMX_INTR_TYPE_SWEXCEPTION 7      // 软件异常
 
+#define GUEST_ACTIVITY_ACTIVE 0
+#define GUEST_ACTIVITY_HLT 1
+#define GUEST_ACTIVITY_SHUTDOWN 2
+#define GUEST_ACTIVITY_WAIT_SIPI 3
+
 uint32_t vmxon(uint64_t *vmxon_region_phy);
 uint32_t vmclear(uint64_t *vmcs_region_phy);
 uint32_t vmptrld(uint64_t *vmcs_region_phy);
@@ -454,6 +459,7 @@ void *vmx_get_exit_handler();
 vmx_cpu_t *vmx_create_cpu(mem_pool_t *mem_pool);
 int vmx_init(vmx_cpu_t *vmx_cpu);
 int vmx_setup(vmx_cpu_t *vmx_cpu);
+uint64_t vmx_get_instruction_error_code(void);
 int vmx_capture(vmx_cpu_t *vmx_cpu);
 void vmx_launch(vmx_cpu_t *vmx_cpu);
 void vmx_dump_guest_state(void);

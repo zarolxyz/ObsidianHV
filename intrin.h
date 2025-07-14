@@ -5,6 +5,7 @@
 uint64_t read_cr0(void);
 void write_cr0(uint64_t value);
 uint64_t read_cr2(void); // 缺页地址寄存器
+uint64_t write_cr2(uint64_t value);
 uint64_t read_cr3(void); // 页目录基址寄存器
 uint64_t write_cr3(uint64_t value);
 uint64_t read_cr4(void);
