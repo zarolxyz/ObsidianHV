@@ -86,52 +86,56 @@ void handle_wrmsr(regs_t *regs)
     vmx_advance_rip();
 }
 
-void handle_xsetbv(regs_t *regs)
+int is_valid_xcr(uint64_t xcr)
 {
-    uint32_t index = regs->rcx;
-    uint64_t xcr = (regs->rax & 0xffffffff) | regs->rdx << 32;
-
-    // 检测非法的xsetbv，以防止HOST异常
-    if (index != 0)
-    {
-        vmx_inject_gp(0);
-    }
-
-    // 无需检测cr4.xsave。未启用cr4.xsave时执行xsetbv不会被虚拟机监视器捕获，CPU自动触发UD
-
     uint64_t xcr_supported_bits = get_xcr_supported_bits();
 
     if (xcr & ~xcr_supported_bits)
     {
-        vmx_inject_gp(0);
+        return 0;
     }
 
     if (!(xcr & XFEATURE_MASK_FP))
     {
-        vmx_inject_gp(0);
+        return 0;
     }
     if ((xcr & XFEATURE_MASK_YMM) && !(xcr & XFEATURE_MASK_SSE))
     {
-        vmx_inject_gp(0);
+        return 0;
     }
     if ((!(xcr & XFEATURE_MASK_BNDREGS)) !=
         (!(xcr & XFEATURE_MASK_BNDCSR)))
     {
-        vmx_inject_gp(0);
+        return 0;
     }
     if (xcr & XFEATURE_MASK_AVX512)
     {
         if (!(xcr & XFEATURE_MASK_YMM))
-            vmx_inject_gp(0);
+            return 0;
         if ((xcr & XFEATURE_MASK_AVX512) != XFEATURE_MASK_AVX512)
-            vmx_inject_gp(0);
+            return 0;
     }
 
     if ((xcr & XFEATURE_MASK_XTILE) &&
         ((xcr & XFEATURE_MASK_XTILE) != XFEATURE_MASK_XTILE))
-        vmx_inject_gp(0);
+        return 0;
+    return 1;
+}
 
-    xsetbv(index, xcr); // 直通xcr
+void handle_xsetbv(regs_t *regs)
+{
+    uint32_t index = regs->rcx;
+    uint64_t xcr = (regs->rax & 0xffffffff) | regs->rdx << 32;
+    if (index != 0)
+    {
+        vmx_inject_gp(0);
+    }
+    if (!is_valid_xcr(xcr))
+    {
+        vmx_inject_gp(0);
+        return;
+    }
+    xsetbv(index, xcr);
     vmx_advance_rip();
 }
 
