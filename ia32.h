@@ -132,7 +132,7 @@ typedef union
   };
 
   uint64_t all;
-} ia32_feature_control_register;
+} ia32_feature_control_register_t;
 
 #define SEGMENT_DATA_RO 0x0
 #define SEGMENT_DATA_RO_ACCESSED 0x1

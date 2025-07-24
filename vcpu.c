@@ -217,13 +217,15 @@ uintptr_t get_vm_exit_handler_asm();
 
 static void setup_vmcs(vcpu_t *vcpu)
 {
-  vmx_set_control_field(CPU_BASED_VM_EXEC_CONTROL,
-                        CPU_BASED_ACTIVATE_MSR_BITMAP |
-                            CPU_BASED_ACTIVATE_SECONDARY_CONTROLS);
+  vmx_set_control_field(CPU_BASED_VM_EXEC_CONTROL, CPU_BASED_ACTIVATE_MSR_BITMAP | CPU_BASED_ACTIVATE_SECONDARY_CONTROLS);
   vmx_set_control_field(SECONDARY_VM_EXEC_CONTROL, SECONDARY_EXEC_ENABLE_INVPCID | SECONDARY_EXEC_ENABLE_RDTSCP | SECONDARY_EXEC_ENABLE_XSAVES_XSTORS | SECONDARY_EXEC_PT_CONCEAL_VMX | SECONDARY_EXEC_USE_GPA_FOR_INTEL_PT | SECONDARY_EXEC_ENABLE_EPT | SECONDARY_EXEC_ENABLE_VPID | SECONDARY_EXEC_UNRESTRICTED_GUEST);
   vmx_set_control_field(PIN_BASED_VM_EXEC_CONTROL, 0);
   vmx_set_control_field(VM_ENTRY_CONTROLS, VM_ENTRY_IA32E_MODE | VM_ENTRY_LOAD_DEBUG_CONTROLS | VM_ENTRY_LOAD_IA32_EFER | VM_ENTRY_LOAD_IA32_LBR_CTL | VM_ENTRY_LOAD_IA32_RTIT_CTL | VM_ENTRY_PT_CONCEAL_PIP);
   vmx_set_control_field(VM_EXIT_CONTROLS, VM_EXIT_HOST_ADDR_SPACE_SIZE | VM_EXIT_SAVE_DEBUG_CONTROLS | VM_EXIT_SAVE_IA32_EFER | VM_EXIT_LOAD_IA32_EFER | VM_EXIT_CLEAR_IA32_LBR_CTL | VM_EXIT_CLEAR_IA32_RTIT_CTL | VM_EXIT_PT_CONCEAL_PIP);
+
+  vmx_set_control_field(SECONDARY_VM_EXEC_CONTROL, SECONDARY_EXEC_ENABLE_INVPCID | SECONDARY_EXEC_ENABLE_RDTSCP | SECONDARY_EXEC_ENABLE_XSAVES_XSTORS);
+  vmx_set_control_field(VM_ENTRY_CONTROLS, VM_ENTRY_IA32E_MODE | VM_ENTRY_LOAD_DEBUG_CONTROLS | VM_ENTRY_LOAD_IA32_EFER);
+  vmx_set_control_field(VM_EXIT_CONTROLS, VM_EXIT_HOST_ADDR_SPACE_SIZE | VM_EXIT_SAVE_DEBUG_CONTROLS | VM_EXIT_SAVE_IA32_EFER | VM_EXIT_LOAD_IA32_EFER);
 
   vmwrite(EPT_POINTER, vcpu->shared->ept_mgr.eptp.all);
   vmwrite(VIRTUAL_PROCESSOR_ID, VCPU_VPID);
@@ -350,15 +352,15 @@ int launch_vcpu(vcpu_t *vcpu)
     PRINTF("CPU does not support Intel virtualization features\n");
     return -1;
   }
-  if (!(vmx_basic & VMX_BASIC_TRUE_CONTROLS))
-  {
-    PRINTF("CPU does not support VMX true controls\n");
-    return -1;
-  }
   if (!vmx_check_feature_control())
   {
     PRINTF(
         "CPU virtualization is locked\n");
+    return -1;
+  }
+  if (!(vmx_basic & VMX_BASIC_TRUE_CONTROLS))
+  {
+    PRINTF("CPU does not support VMX true controls\n");
     return -1;
   }
 
@@ -395,8 +397,8 @@ int launch_vcpu(vcpu_t *vcpu)
     return -1;
   }
   setup_vmcs(vcpu);
-  invvpid_single(VCPU_VPID);
-  invept_single(vcpu->shared->ept_mgr.eptp.all);
+  // invvpid_single(VCPU_VPID);
+  // invept_single(vcpu->shared->ept_mgr.eptp.all);
   launch_vcpu_asm(vcpu);
   PRINTF("Failed to launch VCPU: %x\n", vmread(VM_INSTRUCTION_ERROR));
   return -1;

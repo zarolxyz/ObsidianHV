@@ -28,7 +28,7 @@ static uint64_t get_xcr_supported_bits()
 {
     uint64_t rax = 0xd, rcx = 0, rdx = 0, rbx = 0;
     cpuid_wrapper(&rax, &rcx, &rdx, &rbx);
-    return rax;
+    return (rax & 0xffffffff) | (rdx << 32);
 }
 
 static uint64_t get_extended_model_id()
@@ -62,7 +62,7 @@ void handle_rdmsr(regs_t *regs)
     uint64_t value = read_msr(regs->rcx);
     if (regs->rcx == MSR_IA32_FEATURE_CONTROL)
     {
-        ia32_feature_control_register feature_control = {0};
+        ia32_feature_control_register_t feature_control = {0};
         feature_control.all = value;
         feature_control.lock_bit = 1;
         feature_control.enable_vmx_outside_smx = 0;
@@ -129,6 +129,7 @@ void handle_xsetbv(regs_t *regs)
     if (index != 0)
     {
         vmx_inject_gp(0);
+        return;
     }
     if (!is_valid_xcr(xcr))
     {

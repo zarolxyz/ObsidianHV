@@ -135,6 +135,7 @@ int select_memory_type(int type1, int type2)
 
 int get_var_mtrr_type_by_range(uint64_t start, uint64_t size)
 {
+    return MEMORY_TYPE_WRITE_BACK;
     int current_type = MEMORY_TYPE_WRITE_BACK; // 默认为 WB
     msr_mtrr_capabilities_t mtrr_capabilities = {.all = read_msr(MSR_IA32_MTRR_CAP)};
     for (int i = 0; i < mtrr_capabilities.fields.variable_range_count; i++)

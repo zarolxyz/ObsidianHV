@@ -51,7 +51,7 @@ int vmx_check_cpuid()
 
 int vmx_check_feature_control()
 {
-  ia32_feature_control_register feature_control;
+  ia32_feature_control_register_t feature_control;
   feature_control.all = read_msr(MSR_IA32_FEATURE_CONTROL);
   if (feature_control.enable_vmx_outside_smx)
   {
