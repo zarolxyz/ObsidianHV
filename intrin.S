@@ -258,10 +258,6 @@ disable_interrupt:
 
 // void cpuid_wrapper(uint64_t *rax, uint64_t *rcx, uint64_t *rdx, uint64_t *rbx);
 .global cpuid_wrapper
-#   rdi = eax_ptr (输入主功能号，输出EAX结果)
-#   rsi = ecx_ptr (输入子功能号，输出ECX结果)
-#   rdx = edx_ptr (输出EDX结果)
-#   rcx = ebx_ptr (输出EBX结果)
 cpuid_wrapper:
     push rbx                 # 保存被调用者保存的寄存器（RBX会被CPUID修改）[1,5](@ref)
     mov r8, rdx              # 保存第三个参数（edx_ptr）到临时寄存器R8
@@ -270,6 +266,8 @@ cpuid_wrapper:
     # 加载输入参数到寄存器
     mov rax, [rdi]           # 从eax_ptr加载主功能号到EAX[1,9](@ref)
     mov rcx, [rsi]           # 从ecx_ptr加载子功能号到ECX[1,9](@ref)
+    mov rdx, [r8]
+    mov rbx, [r9]
 
     cpuid                    # 执行CPUID指令（结果存入EAX/EBX/ECX/EDX）[1,2](@ref)
 
@@ -282,15 +280,18 @@ cpuid_wrapper:
     pop rbx                  # 恢复原始RBX值[1,5](@ref)
     ret                      # 返回调用者
 
-.global xsetbv_wrapper
-#   rdi = ecx (输入ECX)
-#   rsi = eax (输入EAX)
-#   rdx = edx (输入EDX)
-xsetbv_wrapper:
-    mov rcx, rdi              # 保存第一个参数（ecx）到ECX[1,9](@ref)
-    mov rax, rsi              # 保存第二个参数（eax）到EAX[1,9](@ref)
-    xsetbv                    # 执行xsetbv指令（结果存入EAX/ECX/EDX）[1,2](@ref)
+.global xsetbv
+# 函数：xsetbv
+# 参数：rdi = index (uint32_t), rsi = value (uint64_t)
+.text
+xsetbv:
+    mov ecx, edi         # index → ecx (低32位)
+    mov eax, esi         # value 低32位 → eax
+    shr rsi, 32          # rsi >> 32 → 高32位
+    mov edx, esi         # 高32位 → edx
+    xsetbv               # 执行指令
     ret
+.end
 
 .global read_tsc
 read_tsc:

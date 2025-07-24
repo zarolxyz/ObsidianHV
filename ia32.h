@@ -2,104 +2,17 @@
 
 #include <stdint.h>
 
-#pragma pack(push, 1)
-
-typedef struct
-{
-  uint16_t limit_low;
-  uint16_t base_low;
-  uint8_t base_mid;
-  uint8_t type : 4;
-  uint8_t s : 1;
-  uint8_t dpl : 2;
-  uint8_t p : 1;
-  uint8_t limit_high : 4;
-  uint8_t avl : 1;
-  uint8_t l : 1;
-  uint8_t db : 1;
-  uint8_t g : 1;
-  uint8_t base_high;
-} gdt_desc_t;
-
-typedef struct
-{
-  uint16_t limit_low;
-  uint16_t base_low;
-  uint8_t base_mid;
-  uint8_t type : 4;
-  uint8_t s : 1;
-  uint8_t dpl : 2;
-  uint8_t p : 1;
-  uint8_t limit_high : 4;
-  uint8_t avl : 1;
-  uint8_t l : 1;
-  uint8_t db : 1;
-  uint8_t g : 1;
-  uint8_t base_high;
-  uint32_t base_upper32;
-  uint32_t reserved;
-} gdt_desc128_t;
-
-typedef struct
-{
-  uint16_t limit; // 限长
-  uint64_t base;  // 基址
-} gdtr_t, idtr_t;
-
-#define PAGE_TABLE_SIZE 512
-
-typedef struct
-{
-  // 权限与状态标志
-  uint64_t present : 1;   // 位0: 页是否有效
-  uint64_t write : 1;     // 位1: 可写权限 (1=可写)
-  uint64_t user : 1;      // 位2: 访问权限 (1=用户态可访问)
-  uint64_t pwt : 1;       // 位3: 写缓存策略 (1=Write-Through)
-  uint64_t pcd : 1;       // 位4: 缓存禁用 (1=禁用缓存)
-  uint64_t accessed : 1;  // 位5: 访问标记 (CPU自动置位)
-  uint64_t reserved1 : 2; // 位6-7: 必须为0 (硬件保留)
-  uint64_t ignored : 4;   // 位8-11: 忽略（可保留或供OS使用）
-
-  // 物理地址与控制位
-  uint64_t pfn : 40;       // 位12-51: 下一级页表物理地址高40位
-  uint64_t available : 11; // 位52-62: 供操作系统自由使用
-  uint64_t nx : 1;         // 位63: 禁止执行位 (1=禁止执行)
-} pml4_entry_t;
-
-typedef struct
-{
-  uint64_t present : 1;    // 位0
-  uint64_t write : 1;      // 位1
-  uint64_t user : 1;       // 位2
-  uint64_t pwt : 1;        // 位3 (Page Write-Through)
-  uint64_t pcd : 1;        // 位4 (Page Cache Disable)
-  uint64_t reserved1 : 2;  // 位5-6 (必须为0)
-  uint64_t page_size : 1;  // 位7
-  uint64_t reserved2 : 4;  // 位8-11 (必须为0)
-  uint64_t pfn : 40;       // 位12-51
-  uint64_t available : 11; // 位52-62
-  uint64_t nx : 1;         // 位63
-} pdpt_entry_t;
-
-#define HIGH_MSR_BASE 0xc0000000
-
-static inline int is_high_msr(uint32_t index) { return index >= HIGH_MSR_BASE; }
-
-static inline int is_valid_msr(uint32_t index)
-{
-  // Check if the MSR index is within the valid range (0x00000000 to 0xFFFFFFFF)
-  // Typically, MSRs are in the range 0x00000000 to 0x00001FFF and 0xC0000000 to
-  // 0xC0001FFF
-  if ((index <= 0x00001FFF) ||
-      (index >= HIGH_MSR_BASE && index <= HIGH_MSR_BASE + 0x00001FFF))
-  {
-    return 1; // Valid MSR index
-  }
-  else
-  {
-    return 0; // Invalid MSR index
-  }
-}
+#define CR0_PE_MASK 0x00000001 // 保护模式使能（Protection Enable）[1,2,4](@ref)
+#define CR0_MP_MASK 0x00000002 // 协处理器监控（Monitor Coprocessor）[2,3,6](@ref)
+#define CR0_EM_MASK 0x00000004 // 协处理器仿真（Emulation）[2,3,6](@ref)
+#define CR0_TS_MASK 0x00000008 // 任务切换（Task Switched）[2,3,6](@ref)
+#define CR0_ET_MASK 0x00000010 // 扩展类型（Extension Type，指示协处理器型号）[2,3,6](@ref)
+#define CR0_NE_MASK 0x00000020 // 数值错误处理（Numeric Error）[1,2,6](@ref)
+#define CR0_WP_MASK 0x00010000 // 写保护（Write Protect，控制只读页写入）[1,2,4](@ref)
+#define CR0_AM_MASK 0x00040000 // 对齐检查（Alignment Mask）[1](@ref)
+#define CR0_NW_MASK 0x20000000 // 非写透（Not Write-through，缓存写策略）[1](@ref)
+#define CR0_CD_MASK 0x40000000 // 缓存禁用（Cache Disable）[1](@ref)
+#define CR0_PG_MASK 0x80000000 // 分页使能（Paging Enable）[1,2,4](@ref)
 
 // CR4 基础功能标志位 (常用)
 #define CR4_VME_MASK (1UL << 0)         // 虚拟8086模式扩展（Virtual-8086 Mode Extensions）[6,7](@ref)
@@ -121,34 +34,180 @@ static inline int is_valid_msr(uint32_t index)
 #define CR4_OSXSAVE_MASK (1UL << 18)    // AVX指令支持（OS Support for XSAVE/XRSTOR）[6,8](@ref)
 #define CR4_PKE_MASK (1UL << 22)        // 保护密钥（Protection Key Enable）[6](@ref)
 
-#include <stdint.h>
-
-/**
- * x86 内部异常中断向量号枚举 (0~20)
- */
-enum
+enum xfeature
 {
-  EXCEPTION_DE = 0,    ///< #DE: Divide Error (除零错误，Fault)
-  EXCEPTION_DB = 1,    ///< #DB: Debug Exception (调试异常，Fault/Trap)
-  EXCEPTION_NMI = 2,   ///< NMI: Non-Maskable Interrupt (不可屏蔽中断)
-  EXCEPTION_BP = 3,    ///< #BP: Breakpoint (断点指令，Trap)
-  EXCEPTION_OF = 4,    ///< #OF: Overflow (溢出检查，Trap)
-  EXCEPTION_BR = 5,    ///< #BR: BOUND Range Exceeded (越界检查，Fault)
-  EXCEPTION_UD = 6,    ///< #UD: Invalid Opcode (无效操作码，Fault)
-  EXCEPTION_NM = 7,    ///< #NM: Device Not Available (协处理器不可用，Fault)
-  EXCEPTION_DF = 8,    ///< #DF: Double Fault (双重故障，Abort)
-  EXCEPTION_CSO = 9,   ///< #Coprocessor Segment Overrun (协处理器段越界，Fault，保留)
-  EXCEPTION_TS = 10,   ///< #TS: Invalid TSS (无效任务状态段，Fault)
-  EXCEPTION_NP = 11,   ///< #NP: Segment Not Present (段不存在，Fault)
-  EXCEPTION_SS = 12,   ///< #SS: Stack Fault (栈段错误，Fault)
-  EXCEPTION_GP = 13,   ///< #GP: General Protection (通用保护故障，Fault)
-  EXCEPTION_PF = 14,   ///< #PF: Page Fault (缺页异常，Fault)
-  EXCEPTION_RESV = 15, ///< Reserved (Intel 保留)
-  EXCEPTION_MF = 16,   ///< #MF: x87 Floating-Point Exception (x87 浮点异常，Fault)
-  EXCEPTION_AC = 17,   ///< #AC: Alignment Check (对齐检查，Fault)
-  EXCEPTION_MC = 18,   ///< #MC: Machine Check (机器检查异常，Abort)
-  EXCEPTION_XM = 19,   ///< #XM: SIMD Floating-Point Exception (SIMD 浮点异常，Fault)
-  EXCEPTION_VE = 20    ///< #VE: Virtualization Exception (虚拟化异常，Fault)
+  XFEATURE_FP,
+  XFEATURE_SSE,
+  /*
+   * Values above here are "legacy states".
+   * Those below are "extended states".
+   */
+  XFEATURE_YMM,
+  XFEATURE_BNDREGS,
+  XFEATURE_BNDCSR,
+  XFEATURE_OPMASK,
+  XFEATURE_ZMM_Hi256,
+  XFEATURE_Hi16_ZMM,
+  XFEATURE_PT_UNIMPLEMENTED_SO_FAR,
+  XFEATURE_PKRU,
+  XFEATURE_PASID,
+  XFEATURE_RSRVD_COMP_11,
+  XFEATURE_RSRVD_COMP_12,
+  XFEATURE_RSRVD_COMP_13,
+  XFEATURE_RSRVD_COMP_14,
+  XFEATURE_LBR,
+  XFEATURE_RSRVD_COMP_16,
+  XFEATURE_XTILE_CFG,
+  XFEATURE_XTILE_DATA,
+
+  XFEATURE_MAX,
 };
 
-#pragma pack(pop)
+#define XFEATURE_MASK_FP (1 << XFEATURE_FP)
+#define XFEATURE_MASK_SSE (1 << XFEATURE_SSE)
+#define XFEATURE_MASK_YMM (1 << XFEATURE_YMM)
+#define XFEATURE_MASK_BNDREGS (1 << XFEATURE_BNDREGS)
+#define XFEATURE_MASK_BNDCSR (1 << XFEATURE_BNDCSR)
+#define XFEATURE_MASK_OPMASK (1 << XFEATURE_OPMASK)
+#define XFEATURE_MASK_ZMM_Hi256 (1 << XFEATURE_ZMM_Hi256)
+#define XFEATURE_MASK_Hi16_ZMM (1 << XFEATURE_Hi16_ZMM)
+#define XFEATURE_MASK_PT (1 << XFEATURE_PT_UNIMPLEMENTED_SO_FAR)
+#define XFEATURE_MASK_PKRU (1 << XFEATURE_PKRU)
+#define XFEATURE_MASK_PASID (1 << XFEATURE_PASID)
+#define XFEATURE_MASK_LBR (1 << XFEATURE_LBR)
+#define XFEATURE_MASK_XTILE_CFG (1 << XFEATURE_XTILE_CFG)
+#define XFEATURE_MASK_XTILE_DATA (1 << XFEATURE_XTILE_DATA)
+
+#define XFEATURE_MASK_FPSSE (XFEATURE_MASK_FP | XFEATURE_MASK_SSE)
+#define XFEATURE_MASK_AVX512 (XFEATURE_MASK_OPMASK | XFEATURE_MASK_ZMM_Hi256 | XFEATURE_MASK_Hi16_ZMM)
+#define XFEATURE_MASK_XTILE (XFEATURE_MASK_XTILE_DATA | XFEATURE_MASK_XTILE_CFG)
+
+#define MSR_ID_LOW_MIN 0x00000000
+#define MSR_ID_LOW_MAX 0x00001FFF
+#define MSR_ID_HIGH_MIN 0xC0000000
+#define MSR_ID_HIGH_MAX 0xC0001FFF
+
+#define MSR_APIC_BASE 0x01B
+#define MSR_IA32_FEATURE_CONTROL 0x03A
+#define MSR_IA32_SYSENTER_CS 0x174
+#define MSR_IA32_SYSENTER_ESP 0x175
+#define MSR_IA32_SYSENTER_EIP 0x176
+#define MSR_IA32_DEBUGCTL 0x1D9
+#define MSR_IA32_EFER 0xC0000080
+#define MSR_IA32_LSTAR 0xC0000082
+#define MSR_FS_BASE 0xC0000100
+#define MSR_GS_BASE 0xC0000101
+#define MSR_SHADOW_GS_BASE 0xC0000102
+#define MSR_IA32_MTRR_CAP 0xFE
+#define MSR_IA32_MTRR_DEF_TYPE 0x2FF
+#define MSR_IA32_MTRR_PHYS_BASE 0x200
+#define MSR_IA32_MTRR_PHYS_MASK 0x201
+#define MSR_IA32_MTRR_FIX_64K_00000 0x250
+#define MSR_IA32_MTRR_FIX_16K_80000 0x258
+#define MSR_IA32_MTRR_FIX_16K_A0000 0x259
+#define MSR_IA32_MTRR_FIX_4K_C0000 0x268
+#define MSR_IA32_MTRR_FIX_4K_C8000 0x269
+#define MSR_IA32_MTRR_FIX_4K_D0000 0x26A
+#define MSR_IA32_MTRR_FIX_4K_D8000 0x26B
+#define MSR_IA32_MTRR_FIX_4K_E0000 0x26C
+#define MSR_IA32_MTRR_FIX_4K_E8000 0x26D
+#define MSR_IA32_MTRR_FIX_4K_F0000 0x26E
+#define MSR_IA32_MTRR_FIX_4K_F8000 0x26F
+
+typedef union
+{
+  struct
+  {
+    uint64_t lock_bit : 1;
+    uint64_t enable_vmx_inside_smx : 1;
+    uint64_t enable_vmx_outside_smx : 1;
+    uint64_t reserved_1 : 5;
+    uint64_t senter_local_function_enables : 7;
+    uint64_t senter_global_enable : 1;
+    uint64_t reserved_2 : 1;
+    uint64_t sgx_launch_control_enable : 1;
+    uint64_t sgx_global_enable : 1;
+    uint64_t reserved_3 : 1;
+    uint64_t lmce_on : 1;
+  };
+
+  uint64_t all;
+} ia32_feature_control_register;
+
+#define SEGMENT_DATA_RO 0x0
+#define SEGMENT_DATA_RO_ACCESSED 0x1
+#define SEGMENT_DATA_RW 0x2
+#define SEGMENT_DATA_RW_ACCESSED 0x3
+#define SEGMENT_DATA_RO_XDOWN 0x4
+#define SEGMENT_DATA_RO_XDOWN_ACCESSED 0x5
+#define SEGMENT_DATA_RW_XDOWN 0x6
+#define SEGMENT_DATA_RW_XDOWN_ACCESSED 0x7
+
+#define SEGMENT_CODE_XO 0x8
+#define SEGMENT_CODE_XO_ACCESSED 0x9
+#define SEGMENT_CODE_RX 0xA
+#define SEGMENT_CODE_RX_ACCESSED 0xB
+#define SEGMENT_CODE_XO_CFORM 0xC
+#define SEGMENT_CODE_XO_CFORM_ACCESSED 0xD
+#define SEGMENT_CODE_RX_CFORM 0xE
+#define SEGMENT_CODE_RX_CFORM_ACCESSED 0xF
+
+#define SEGMENT_SYSTEM_16BIT_TSS_AVAIL 1
+#define SEGMENT_SYSTEM_LDT 2
+#define SEGMENT_SYSTEM_16BIT_TSS_BUSY 3
+#define SEGMENT_SYSTEM_16BIT_CALL_GATE 4
+#define SEGMENT_SYSTEM_TASK_GATE 5
+#define SEGMENT_SYSTEM_16BIT_INT_GATE 6
+#define SEGMENT_SYSTEM_16BIT_TRAP_GATE 7
+#define SEGMENT_SYSTEM_32BIT_TSS_AVAIL 9
+#define SEGMENT_SYSTEM_32BIT_TSS_BUSY 11
+#define SEGMENT_SYSTEM_32BIT_CALL_GATE 12
+#define SEGMENT_SYSTEM_32BIT_INT_GATE 14
+#define SEGMENT_SYSTEM_32BIT_TRAP_GATE 15
+
+#define INVEPT_SINGLE_CONTEXT 0x00000001
+#define INVEPT_ALL_CONTEXT 0x00000002
+
+#define INVVPID_INDIVIDUAL_ADDRESS 0x00000000
+#define INVVPID_SINGLE_CONTEXT 0x00000001
+#define INVVPID_ALL_CONTEXT 0x00000002
+#define INVVPID_SINGLE_CONTEXT_RETAINING_GLOBALS 0x00000003
+
+typedef struct
+{
+  uint64_t ept_pointer;
+  uint64_t reserved;
+} invept_descriptor;
+
+typedef struct
+{
+  uint16_t vpid;
+  uint16_t reserved1;
+  uint32_t reserved2;
+  uint64_t linear_address;
+} invvpid_descriptor;
+
+enum
+{
+  DIVIDE_ERROR = 0x00000000,
+  DEBUG = 0x00000001,
+  NMI = 0x00000002,
+  BREAKPOINT = 0x00000003,
+  OVERFLOW = 0x00000004,
+  BOUND_RANGE_EXCEEDED = 0x00000005,
+  INVALID_OPCODE = 0x00000006,
+  DEVICE_NOT_AVAILABLE = 0x00000007,
+  DOUBLE_FAULT = 0x00000008,
+  COPROCESSOR_SEGMENT_OVERRUN = 0x00000009,
+  INVALID_TSS = 0x0000000A,
+  SEGMENT_NOT_PRESENT = 0x0000000B,
+  STACK_SEGMENT_FAULT = 0x0000000C,
+  GENERAL_PROTECTION = 0x0000000D,
+  PAGE_FAULT = 0x0000000E,
+  X87_FLOATING_POINT_ERROR = 0x00000010,
+  ALIGNMENT_CHECK = 0x00000011,
+  MACHINE_CHECK = 0x00000012,
+  SIMD_FLOATING_POINT_ERROR = 0x00000013,
+  VIRTUALIZATION_EXCEPTION = 0x00000014,
+  CONTROL_PROTECTION = 0x00000015,
+};

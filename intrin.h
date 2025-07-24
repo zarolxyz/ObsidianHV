@@ -63,6 +63,6 @@ void disable_interrupt();
 
 void cpuid_wrapper(uint64_t *rax, uint64_t *rcx, uint64_t *rdx, uint64_t *rbx);
 
-void xsetbv_wrapper(uint64_t rcx, uint64_t rax, uint64_t rdx);
+void xsetbv(uint32_t index, uint64_t value);
 
 uint64_t read_tsc(void);

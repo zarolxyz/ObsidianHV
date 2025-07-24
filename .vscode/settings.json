@@ -1,0 +1,16 @@
+{
+  "files.associations": {
+    "vmx.h": "c",
+    "basic_lib.h": "c",
+    "stdint.h": "c",
+    "hvm.h": "c",
+    "vcpu.h": "c",
+    "ia32.h": "c",
+    "concepts": "cpp",
+    "type_traits": "cpp",
+    "new": "cpp",
+    "intrin.h": "c",
+    "run.h": "c",
+    "ia32_defs.h": "c"
+  }
+}

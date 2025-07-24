@@ -1,10 +1,7 @@
 #pragma once
 
 #include "basic_lib.h"
-#include "vcpu.h"
 #include <stdint.h>
-
-#define HIGH_MSR_BASE 0xc0000000
 
 #pragma pack(push, 1)
 
@@ -29,18 +26,7 @@ typedef struct
   uint8_t write_high[1024];
 } msr_bitmap_t;
 
-typedef struct
-{
-  vcpu_t *vcpu;
-  vmxon_t *vmxon_region;
-  vmcs_t *vmcs_region;
-  msr_bitmap_t *msr_bitmap;
-} vmx_cpu_t;
-
 #pragma pack(pop)
-
-#define MSR_APIC_BASE 0x01B
-#define MSR_IA32_FEATURE_CONTROL 0x03A
 
 #define MSR_IA32_VMX_BASIC 0x480
 #define MSR_IA32_VMX_MISC 0x485
@@ -56,23 +42,6 @@ typedef struct
 #define MSR_IA32_VMX_TRUE_EXIT_CTLS 0x48F
 #define MSR_IA32_VMX_TRUE_ENTRY_CTLS 0x490
 #define MSR_IA32_VMX_VMFUNC 0x491
-
-#define MSR_IA32_SYSENTER_CS 0x174
-#define MSR_IA32_SYSENTER_ESP 0x175
-#define MSR_IA32_SYSENTER_EIP 0x176
-#define MSR_IA32_DEBUGCTL 0x1D9
-
-#define MSR_LSTAR 0xC0000082
-
-#define MSR_FS_BASE 0xC0000100
-#define MSR_GS_BASE 0xC0000101
-#define MSR_SHADOW_GS_BASE 0xC0000102 // SwapGS GS shadow
-
-#define IA32_FEATURE_CONTROL_MSR_LOCK 0x0001
-#define IA32_FEATURE_CONTROL_MSR_ENABLE_VMXON_INSIDE_SMX 0x0002
-#define IA32_FEATURE_CONTROL_MSR_ENABLE_VMXON_OUTSIDE_SMX 0x0004
-#define IA32_FEATURE_CONTROL_MSR_SENTER_PARAM_CTL 0x7f00
-#define IA32_FEATURE_CONTROL_MSR_ENABLE_SENTER 0x8000
 
 #define VMX_BASIC_REVISION_MASK 0x7fffffff
 #define VMX_BASIC_TRUE_CONTROLS (1ULL << 55)
@@ -105,24 +74,31 @@ typedef struct
 #define PIN_BASED_PREEMPT_TIMER 0x00000040
 #define PIN_BASED_POSTED_INTERRUPT 0x00000080
 
-#define VM_EXIT_SAVE_DEBUG_CNTRLS 0x00000004
-#define VM_EXIT_IA32E_MODE_HOST 0x00000200
-#define VM_EXIT_LOAD_PERF_GLOBAL_CTRL 0x00001000
+#define VM_EXIT_SAVE_DEBUG_CONTROLS 0x00000004
+#define VM_EXIT_HOST_ADDR_SPACE_SIZE 0x00000200
+#define VM_EXIT_LOAD_IA32_PERF_GLOBAL_CTRL 0x00001000
 #define VM_EXIT_ACK_INTR_ON_EXIT 0x00008000
-#define VM_EXIT_SAVE_GUEST_PAT 0x00040000
-#define VM_EXIT_LOAD_HOST_PAT 0x00080000
-#define VM_EXIT_SAVE_GUEST_EFER 0x00100000
-#define VM_EXIT_LOAD_HOST_EFER 0x00200000
-#define VM_EXIT_SAVE_PREEMPT_TIMER 0x00400000
+#define VM_EXIT_SAVE_IA32_PAT 0x00040000
+#define VM_EXIT_LOAD_IA32_PAT 0x00080000
+#define VM_EXIT_SAVE_IA32_EFER 0x00100000
+#define VM_EXIT_LOAD_IA32_EFER 0x00200000
+#define VM_EXIT_SAVE_VMX_PREEMPTION_TIMER 0x00400000
 #define VM_EXIT_CLEAR_BNDCFGS 0x00800000
+#define VM_EXIT_PT_CONCEAL_PIP 0x01000000
+#define VM_EXIT_CLEAR_IA32_RTIT_CTL 0x02000000
+#define VM_EXIT_CLEAR_IA32_LBR_CTL 0x04000000
 
-#define VM_ENTRY_IA32E_MODE_GUEST 0x00000200
+#define VM_ENTRY_LOAD_DEBUG_CONTROLS 0x00000004
+#define VM_ENTRY_IA32E_MODE 0x00000200
 #define VM_ENTRY_SMM 0x00000400
 #define VM_ENTRY_DEACT_DUAL_MONITOR 0x00000800
-#define VM_ENTRY_LOAD_PERF_GLOBAL_CTRL 0x00002000
-#define VM_ENTRY_LOAD_GUEST_PAT 0x00004000
-#define VM_ENTRY_LOAD_GUEST_EFER 0x00008000
+#define VM_ENTRY_LOAD_IA32_PERF_GLOBAL_CTRL 0x00002000
+#define VM_ENTRY_LOAD_IA32_PAT 0x00004000
+#define VM_ENTRY_LOAD_IA32_EFER 0x00008000
 #define VM_ENTRY_LOAD_BNDCFGS 0x00010000
+#define VM_ENTRY_PT_CONCEAL_PIP 0x00020000
+#define VM_ENTRY_LOAD_IA32_RTIT_CTL 0x00040000
+#define VM_ENTRY_LOAD_IA32_LBR_CTL 0x00200000
 
 #define SECONDARY_EXEC_VIRTUALIZE_APIC_ACCESSES 0x00000001
 #define SECONDARY_EXEC_ENABLE_EPT 0x00000002
@@ -138,10 +114,13 @@ typedef struct
 #define SECONDARY_EXEC_ENABLE_INVPCID 0x00001000
 #define SECONDARY_EXEC_ENABLE_VM_FUNCTIONS 0x00002000
 #define SECONDARY_EXEC_ENABLE_VMCS_SHADOWING 0x00004000
+#define SECONDARY_EXEC_ENABLE_ENCLS_EXITING 0x00008000
 #define SECONDARY_EXEC_ENABLE_PML 0x00020000
 #define SECONDARY_EXEC_ENABLE_VIRT_EXCEPTIONS 0x00040000
+#define SECONDARY_EXEC_PT_CONCEAL_VMX 0x00080000
 #define SECONDARY_EXEC_ENABLE_XSAVES_XSTORS 0x00100000
 #define SECONDARY_EXEC_PCOMMIT 0x00200000
+#define SECONDARY_EXEC_USE_GPA_FOR_INTEL_PT 0x01000000
 #define SECONDARY_EXEC_TSC_SCALING 0x02000000
 
 enum VMCS_FIELD
@@ -225,6 +204,10 @@ enum VMCS_FIELD
   GUEST_PDPTR2_HIGH = 0x0000280f,
   GUEST_PDPTR3 = 0x00002810,
   GUEST_PDPTR3_HIGH = 0x00002811,
+  GUEST_IA32_BOUND_CONFIG = 0x2812,
+  GUEST_IA32_RTIT_CTRL = 0x2814,
+  GUEST_IA32_LBR_CTL = 0x2816,
+  GUEST_IA32_PKRS = 0x2818,
   HOST_IA32_PAT = 0x00002c00, // 64-Bit Host-State Fields
   HOST_IA32_PAT_HIGH = 0x00002c01,
   HOST_IA32_EFER = 0x00002c02,
@@ -445,22 +428,48 @@ typedef union
 #define GUEST_ACTIVITY_SHUTDOWN 2
 #define GUEST_ACTIVITY_WAIT_SIPI 3
 
+typedef union
+{
+  struct
+  {
+    uint32_t segment_type : 4;
+    uint32_t descriptor_type : 1;
+    uint32_t dpl : 2;
+    uint32_t present : 1;
+    uint32_t reserved0 : 4;
+    uint32_t avl : 1;
+    uint32_t long_mode : 1;
+    uint32_t op_size : 1;
+    uint32_t granularity : 1;
+    uint32_t unusable : 1;
+    uint32_t reserved1 : 15;
+  };
+  uint32_t all;
+} vmx_segment_ar_t;
+
 uint32_t vmxon(uint64_t *vmxon_region_phy);
 uint32_t vmclear(uint64_t *vmcs_region_phy);
 uint32_t vmptrld(uint64_t *vmcs_region_phy);
 uint32_t vmptrst(uint64_t *vmcs_region_phy);
-uint32_t vmread(uint64_t field, uint64_t *value);
-uint32_t vmwrite(uint64_t field, uint64_t value);
-uint32_t vmlaunch(void);
-uint32_t vmresume(void);
+uint64_t vmread(uint64_t field);
+void vmwrite(uint64_t field, uint64_t value);
 uint32_t vmxoff(void);
+void invvpid_single(uint16_t vpid);
+void invept_single(uint64_t eptp);
 
-void *vmx_get_exit_handler();
-vmx_cpu_t *vmx_create_cpu(mem_pool_t *mem_pool);
-int vmx_init(vmx_cpu_t *vmx_cpu);
-int vmx_setup(vmx_cpu_t *vmx_cpu);
-uint64_t vmx_get_instruction_error_code(void);
-int vmx_capture(vmx_cpu_t *vmx_cpu);
-void vmx_launch(vmx_cpu_t *vmx_cpu);
-void vmx_dump_guest_state(void);
-void vmx_dump_host_state(void);
+int vmx_check_cpuid();
+int vmx_check_feature_control();
+uint64_t vmx_ajust_cr0(uint64_t value);
+uint64_t vmx_ajust_cr4(uint64_t value);
+void msr_bitmap_set_read(msr_bitmap_t *msr_bitmap, uint32_t index);
+void msr_bitmap_set_write(msr_bitmap_t *msr_bitmap, uint32_t index);
+void init_msr_bitmap(msr_bitmap_t *msr_bitmap);
+uint32_t vmx_adjust_control_value(uint32_t msr_index, uint32_t control_value);
+void vmx_set_control_field(uint32_t field, uint64_t control);
+uint32_t vmx_convert_access_rights(uint32_t access_rights);
+void vmx_inject_interruption(int type, int vector);
+void vmx_inject_interruption_error_code(int type, int vector, uint32_t error_code);
+void vmx_advance_rip();
+void vmx_inject_ud();
+void vmx_inject_gp(uint32_t error_code);
+void vmx_guest_exit_ia32e();

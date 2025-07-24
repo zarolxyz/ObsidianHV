@@ -22,25 +22,32 @@ void copy_mem(void *target, void *source, uintptr_t size)
   }
 }
 
-mem_pool_t *mem_pool_create(void *pool, uintptr_t size)
+int bit_scan(uint64_t value)
 {
-  mem_pool_t *mem_pool = (mem_pool_t *)ALIGN_UP((uintptr_t)pool, 16);
-  mem_pool->size = size;
-  mem_pool->allocated_size = sizeof(mem_pool_t);
-  mem_pool->pool = pool;
-  return mem_pool;
+  int index = 0;
+  while (value != 0)
+  {
+    if (value & 1)
+    {
+      return index;
+    }
+    value >>= 1;
+    index++;
+  }
+  return -1;
 }
 
-// 分配指定对称内存块
-void *mem_pool_alloc(mem_pool_t *mem_pool, uintptr_t size, uintptr_t alignment)
+// 从bitmap中找到第一个0的位置
+uintptr_t bitmap_find_first_zero(uint8_t *bitmap, uintptr_t len)
 {
-  uintptr_t base_addr = (uintptr_t)mem_pool->pool + mem_pool->allocated_size;
-  uintptr_t aligned_addr = ALIGN_UP(base_addr, alignment);
-  uintptr_t real_size = ALIGN_UP(aligned_addr + size, alignment) - base_addr;
-  if (real_size > mem_pool->size - mem_pool->allocated_size)
-    return NULL;
-  mem_pool->allocated_size += real_size;
-  return (void *)aligned_addr;
+  for (uintptr_t i = 0; i < len; i++)
+  {
+    if (bitmap_get_bit(bitmap, i) == 0)
+    {
+      return i;
+    }
+  }
+  return UINTPTR_MAX;
 }
 
 static void print_char(uint8_t value) { out_byte(DEBUG_SERIAL_PORT, value); }
