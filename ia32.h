@@ -165,28 +165,6 @@ typedef union
 #define SEGMENT_SYSTEM_32BIT_INT_GATE 14
 #define SEGMENT_SYSTEM_32BIT_TRAP_GATE 15
 
-#define INVEPT_SINGLE_CONTEXT 0x00000001
-#define INVEPT_ALL_CONTEXT 0x00000002
-
-#define INVVPID_INDIVIDUAL_ADDRESS 0x00000000
-#define INVVPID_SINGLE_CONTEXT 0x00000001
-#define INVVPID_ALL_CONTEXT 0x00000002
-#define INVVPID_SINGLE_CONTEXT_RETAINING_GLOBALS 0x00000003
-
-typedef struct
-{
-  uint64_t ept_pointer;
-  uint64_t reserved;
-} invept_descriptor;
-
-typedef struct
-{
-  uint16_t vpid;
-  uint16_t reserved1;
-  uint32_t reserved2;
-  uint64_t linear_address;
-} invvpid_descriptor;
-
 enum
 {
   DIVIDE_ERROR = 0x00000000,

@@ -7,17 +7,17 @@ typedef union
 {
     struct
     {
-        uint64_t read : 1;
-        uint64_t write : 1;
-        uint64_t execute : 1;
-        uint64_t reserved0 : 5;
+        uint64_t read_access : 1;
+        uint64_t write_access : 1;
+        uint64_t execute_access : 1;
+        uint64_t reserved_1 : 5;
         uint64_t accessed : 1;
-        uint64_t ignored0 : 1;
-        uint64_t umx : 1;
-        uint64_t ignored1 : 1;
-        uint64_t pdpt_offset : 40;
-        uint64_t reserved1 : 12;
+        uint64_t reserved_2 : 1;
+        uint64_t user_mode_execute : 1;
+        uint64_t reserved_3 : 1;
+        uint64_t page_frame_number : 36;
     };
+
     uint64_t all;
 } ept_pml4e_t;
 
@@ -25,17 +25,17 @@ typedef union
 {
     struct
     {
-        uint64_t read : 1;
-        uint64_t write : 1;
-        uint64_t execute : 1;
-        uint64_t reserved0 : 5;
+        uint64_t read_access : 1;
+        uint64_t write_access : 1;
+        uint64_t execute_access : 1;
+        uint64_t reserved_1 : 5;
         uint64_t accessed : 1;
-        uint64_t ignored0 : 1;
-        uint64_t umx : 1;
-        uint64_t ignored1 : 1;
-        uint64_t pd_offset : 40;
-        uint64_t ignored2 : 12;
+        uint64_t reserved_2 : 1;
+        uint64_t user_mode_execute : 1;
+        uint64_t reserved_3 : 1;
+        uint64_t page_frame_number : 36;
     };
+
     uint64_t all;
 } ept_pdpte_t;
 
@@ -44,21 +44,23 @@ typedef union
 {
     struct
     {
-        uint64_t read : 1;
-        uint64_t write : 1;
-        uint64_t execute : 1;
+        uint64_t read_access : 1;
+        uint64_t write_access : 1;
+        uint64_t execute_access : 1;
         uint64_t memory_type : 3;
         uint64_t ignore_pat : 1;
-        uint64_t large_pde : 1;
+        uint64_t large_page : 1;
         uint64_t accessed : 1;
         uint64_t dirty : 1;
-        uint64_t umx : 1;
-        uint64_t ignored0 : 1;
-        uint64_t reserved : 9;
-        uint64_t page_offset : 31;
-        uint64_t ignored1 : 8;
-        uint64_t s_shadow_stack : 1;
-        uint64_t ignored2 : 2;
+        uint64_t user_mode_execute : 1;
+        uint64_t reserved_1 : 10;
+        uint64_t page_frame_number : 27;
+        uint64_t reserved_2 : 9;
+        uint64_t verify_guest_paging : 1;
+        uint64_t paging_write_access : 1;
+        uint64_t reserved_3 : 1;
+        uint64_t supervisor_shadow_stack : 1;
+        uint64_t reserved_4 : 2;
         uint64_t suppress_ve : 1;
     };
     uint64_t all;
@@ -69,16 +71,15 @@ typedef union
     ept_large_pde_t large;
     struct
     {
-        uint64_t read : 1;
-        uint64_t write : 1;
-        uint64_t execute : 1;
-        uint64_t reserved0 : 5;
+        uint64_t read_access : 1;
+        uint64_t write_access : 1;
+        uint64_t execute_access : 1;
+        uint64_t reserved_1 : 5;
         uint64_t accessed : 1;
-        uint64_t ignored0 : 1;
-        uint64_t umx : 1;
-        uint64_t ignored1 : 1;
-        uint64_t pt_offset : 40;
-        uint64_t ignored2 : 12;
+        uint64_t reserved_2 : 1;
+        uint64_t user_mode_execute : 1;
+        uint64_t reserved_3 : 1;
+        uint64_t page_frame_number : 36;
     };
     uint64_t all;
 } ept_pde_t;
@@ -87,37 +88,42 @@ typedef union
 {
     struct
     {
-        uint64_t read : 1;
-        uint64_t write : 1;
-        uint64_t execute : 1;
+        uint64_t read_access : 1;
+        uint64_t write_access : 1;
+        uint64_t execute_access : 1;
         uint64_t memory_type : 3;
         uint64_t ignore_pat : 1;
-        uint64_t ignored0 : 1;
+        uint64_t reserved_1 : 1;
         uint64_t accessed : 1;
         uint64_t dirty : 1;
-        uint64_t umx : 1;
-        uint64_t ignored1 : 1;
-        uint64_t page_offset : 40;
-        uint64_t ignored2 : 8;
-        uint64_t s_shadow_stack : 1;
-        uint64_t subpage_write : 1;
-        uint64_t ignored3 : 1;
+        uint64_t user_mode_execute : 1;
+        uint64_t reserved_2 : 1;
+        uint64_t page_frame_number : 36;
+        uint64_t reserved_3 : 9;
+        uint64_t verify_guest_paging : 1;
+        uint64_t paging_write_access : 1;
+        uint64_t reserved_4 : 1;
+        uint64_t supervisor_shadow_stack : 1;
+        uint64_t sub_page_write_permissions : 1;
+        uint64_t reserved_5 : 1;
         uint64_t suppress_ve : 1;
     };
     uint64_t all;
 } ept_pte_t;
+
+#define EPT_PAGE_WALK_LENGTH_4 0x00000003
 
 typedef union
 {
     struct
     {
 
-        uint64_t memory_type : 3;  // bits	0-2
-        uint64_t walk_length : 3;  // bits	3-5
-        uint64_t dirty_flag : 1;   // bit	6
-        uint64_t enable_sss : 1;   // bit	7
-        uint64_t reserved : 4;     // bits	8-11
-        uint64_t pml4_offset : 52; // bits	12-63
+        uint64_t memory_type : 3;
+        uint64_t page_walk_length : 3;
+        uint64_t enable_access_and_dirty_flags : 1;
+        uint64_t enable_supervisor_shadow_stack_pages : 1;
+        uint64_t reserved_1 : 4;
+        uint64_t page_frame_number : 36;
     };
     uint64_t all;
 } eptp_t;

@@ -76,7 +76,7 @@ static ept_pde_t *get_pde(ept_data_t *ept, uint64_t addr)
 
 static ept_pte_t *get_pt_from_pde(ept_pde_t *pde)
 {
-    return (ept_pte_t *)(((uint64_t)pde->pt_offset << PAGE_SHIFT));
+    return (ept_pte_t *)(((uint64_t)pde->page_frame_number << PAGE_SHIFT));
 }
 
 ept_pte_t *ept_alloc_pt(ept_mgr_t *mgr)
@@ -94,16 +94,16 @@ ept_pte_t *ept_alloc_pt(ept_mgr_t *mgr)
 ept_pte_t *ept_split_pde(ept_mgr_t *mgr, ept_pde_t *pde)
 {
     ept_pte_t *pt = ept_alloc_pt(mgr);
-    if (pt == NULL || !pde->large.large_pde)
+    if (pt == NULL || !pde->large.large_page)
     {
         PRINTF("Failed to split PDE\n");
         return NULL;
     }
     for (int i = 0; i < 512; i++)
     {
-        pt[i] = (ept_pte_t){.page_offset = (pde->large.page_offset << 9) + i, .read = 1, .write = 1, .execute = 1, .memory_type = pde->large.memory_type};
+        pt[i] = (ept_pte_t){.page_frame_number = (pde->large.page_frame_number << 9) + i, .read_access = 1, .write_access = 1, .execute_access = 1, .memory_type = pde->large.memory_type};
     }
-    *pde = (ept_pde_t){.pt_offset = (uint64_t)pt >> PAGE_SHIFT, .read = 1, .write = 1, .execute = 1};
+    *pde = (ept_pde_t){.page_frame_number = (uint64_t)pt >> PAGE_SHIFT, .read_access = 1, .write_access = 1, .execute_access = 1};
     return pt;
 }
 
@@ -179,15 +179,15 @@ void init_ept(ept_mgr_t *mgr)
 {
     ept_data_t *ept = mgr->ept;
     zero_mem(ept, sizeof(ept_data_t));
-    ept->pml4[0] = (ept_pml4e_t){.pdpt_offset = (uint64_t)ept->pdpt >> PAGE_SHIFT, .read = 1, .write = 1, .execute = 1};
+    ept->pml4[0] = (ept_pml4e_t){.page_frame_number = (uint64_t)ept->pdpt >> PAGE_SHIFT, .read_access = 1, .write_access = 1, .execute_access = 1};
     for (int i = 0; i < 512; i++)
     {
-        ept->pdpt[i] = (ept_pdpte_t){.pd_offset = (uint64_t)ept->pds[i] >> PAGE_SHIFT, .read = 1, .write = 1, .execute = 1};
+        ept->pdpt[i] = (ept_pdpte_t){.page_frame_number = (uint64_t)ept->pds[i] >> PAGE_SHIFT, .read_access = 1, .write_access = 1, .execute_access = 1};
         for (int j = 0; j < 512; j++)
         {
             ept_pde_t *pde = &(ept->pds[i][j]);
-            pde->large = (ept_large_pde_t){.page_offset = ((uint64_t)i << 9) + j, .read = 1, .write = 1, .execute = 1, .large_pde = 1, .memory_type = MEMORY_TYPE_WRITE_BACK};
-            uint64_t start = (uint64_t)pde->large.page_offset << 21;
+            pde->large = (ept_large_pde_t){.page_frame_number = ((uint64_t)i << 9) + j, .read_access = 1, .write_access = 1, .execute_access = 1, .large_page = 1, .memory_type = MEMORY_TYPE_WRITE_BACK};
+            uint64_t start = (uint64_t)pde->large.page_frame_number << 21;
             uint64_t size = 1 << 21;
             int type = get_var_mtrr_type_by_range(start, size);
             if (type == MEMORY_TYPE_INVALID)
@@ -269,7 +269,7 @@ void init_ept(ept_mgr_t *mgr)
             };
         ept_pde_t *pde = &ept->pds[0][0];
         ept_pte_t *pt = NULL;
-        if (pde->large.large_pde)
+        if (pde->large.large_page)
         {
             pt = ept_split_pde(mgr, pde);
         }
@@ -291,5 +291,5 @@ void init_ept(ept_mgr_t *mgr)
         }
     }
 
-    mgr->eptp = (eptp_t){.pml4_offset = (uint64_t)ept->pml4 >> PAGE_SHIFT, .memory_type = MEMORY_TYPE_WRITE_BACK, .walk_length = 3, .dirty_flag = 1};
+    mgr->eptp = (eptp_t){.page_frame_number = (uint64_t)ept->pml4 >> PAGE_SHIFT, .memory_type = MEMORY_TYPE_WRITE_BACK, .page_walk_length = EPT_PAGE_WALK_LENGTH_4, .enable_access_and_dirty_flags = 1};
 }

@@ -17,7 +17,7 @@ int bit_scan(uint64_t value);
 uintptr_t bitmap_find_first_zero(uint8_t *bitmap, uintptr_t len);
 
 #define DEBUG_SERIAL_PORT 0x3f8
-#define PRINTF(fmt, ...) serial_print(fmt, ##__VA_ARGS__)
+#define PRINTF(fmt, ...) // serial_print(fmt, ##__VA_ARGS__)
 
 void serial_print(const char *fmt, ...);
 

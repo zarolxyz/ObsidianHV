@@ -3,17 +3,39 @@
 #include "basic_lib.h"
 #include "ia32.h"
 
-void invept(int type, const invept_descriptor *desc);
-void invvpid(int type, const invvpid_descriptor *desc);
+#define INVEPT_SINGLE_CONTEXT 0x00000001
+#define INVEPT_ALL_CONTEXT 0x00000002
+
+#define INVVPID_INDIVIDUAL_ADDRESS 0x00000000
+#define INVVPID_SINGLE_CONTEXT 0x00000001
+#define INVVPID_ALL_CONTEXT 0x00000002
+#define INVVPID_SINGLE_CONTEXT_RETAINING_GLOBALS 0x00000003
+
+typedef struct
+{
+  uint64_t ept_pointer;
+  uint64_t reserved;
+} invept_descriptor_t;
+
+typedef struct
+{
+  uint16_t vpid;
+  uint16_t reserved1;
+  uint32_t reserved2;
+  uint64_t linear_address;
+} invvpid_descriptor_t;
+
+void invept(int type, const invept_descriptor_t *desc);
+void invvpid(int type, const invvpid_descriptor_t *desc);
 void invvpid_single(uint16_t vpid)
 {
-  invvpid_descriptor desc = {.vpid = vpid};
+  invvpid_descriptor_t desc = {.vpid = vpid};
   invvpid(INVVPID_SINGLE_CONTEXT, &desc);
 }
 
 void invept_single(uint64_t eptp)
 {
-  invept_descriptor desc = {.ept_pointer = eptp};
+  invept_descriptor_t desc = {.ept_pointer = eptp};
   invept(INVEPT_SINGLE_CONTEXT, &desc);
 }
 

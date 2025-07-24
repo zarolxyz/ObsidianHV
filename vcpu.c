@@ -330,7 +330,6 @@ static void setup_vmcs(vcpu_t *vcpu)
   vmwrite(HOST_IA32_SYSENTER_CS, read_msr(MSR_IA32_SYSENTER_CS));
   vmwrite(HOST_IA32_SYSENTER_ESP, read_msr(MSR_IA32_SYSENTER_ESP));
   vmwrite(HOST_IA32_SYSENTER_EIP, read_msr(MSR_IA32_SYSENTER_EIP));
-  PRINTF("Launch VCPU\n");
 
   vmwrite(GUEST_DR7, read_dr7());
   vmwrite(GUEST_IA32_DEBUGCTL, read_msr(MSR_IA32_DEBUGCTL));
@@ -338,7 +337,6 @@ static void setup_vmcs(vcpu_t *vcpu)
   vmwrite(GUEST_SYSENTER_CS, read_msr(MSR_IA32_SYSENTER_CS));
   vmwrite(GUEST_SYSENTER_ESP, read_msr(MSR_IA32_SYSENTER_ESP));
   vmwrite(GUEST_SYSENTER_EIP, read_msr(MSR_IA32_SYSENTER_EIP));
-  PRINTF("Launch VCPU\n");
 }
 
 void launch_vcpu_asm(vcpu_t *vcpu);
