@@ -22,7 +22,7 @@ void *alloc_vcpu_shared(obhv_t *obhv)
     vcpu_shared_t *vcpu_shared = (vcpu_shared_t *)obhv_alloc(obhv, sizeof(vcpu_shared_t), 16);
     if (vcpu_shared == NULL)
         return NULL;
-    vcpu_shared->host_pt = obhv_alloc(obhv, sizeof(host_pt_t), PAGE_SIZE);
+    vcpu_shared->host_pt = obhv_alloc(obhv, sizeof(pt_data_t), PAGE_SIZE);
     if (vcpu_shared->host_pt == NULL)
         return NULL;
     vcpu_shared->msr_bitmap = obhv_alloc(obhv, sizeof(msr_bitmap_t), PAGE_SIZE);
@@ -39,10 +39,10 @@ void *alloc_vcpu(obhv_t *obhv)
     vcpu_t *vcpu = obhv_alloc(obhv, sizeof(vcpu_t), 16);
     if (vcpu == NULL)
         return NULL;
-    vcpu->host_gdt = obhv_alloc(obhv, sizeof(host_gdt_t), 16);
+    vcpu->host_gdt = obhv_alloc(obhv, sizeof(gdt_data_t), 16);
     if (vcpu->host_gdt == NULL)
         return NULL;
-    vcpu->host_tss = obhv_alloc(obhv, sizeof(host_tss_t), 16);
+    vcpu->host_tss = obhv_alloc(obhv, sizeof(tss64_t), 16);
     if (vcpu->host_tss == NULL)
         return NULL;
     vcpu->host_stack = obhv_alloc(obhv, sizeof(host_stack_t), 16);

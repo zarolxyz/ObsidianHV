@@ -134,6 +134,12 @@ typedef union
   uint64_t all;
 } ia32_feature_control_register_t;
 
+typedef struct
+{
+  uint16_t limit; // 限长
+  uint64_t base;  // 基址
+} gdtr_t, idtr_t;
+
 #define SEGMENT_DATA_RO 0x0
 #define SEGMENT_DATA_RO_ACCESSED 0x1
 #define SEGMENT_DATA_RW 0x2

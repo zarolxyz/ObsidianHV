@@ -1,7 +1,6 @@
 #include "vcpu.h"
 #include "basic_lib.h"
 #include "intrin.h"
-#include "run.h"
 
 #define HOST_GDT_CS 0x08
 #define HOST_GDT_TR 0x10
@@ -10,68 +9,6 @@
 
 // 打印时带上VCPU编号
 #define VCPU_PRINTF(vcpu, fmt, ...) PRINTF("VCPU%d: " fmt, vcpu->vcpu_id, ##__VA_ARGS__)
-
-// 检查CPU是否支持1G大页
-static int check_pdpe1gb()
-{
-  uint64_t rax = 0x80000000, rcx, rdx, rbx;
-  cpuid_wrapper(&rax, &rcx, &rdx, &rbx);
-  // 检查是否支持0x80000001功能
-  if (rax < 0x80000001)
-  {
-    return 0; // 不支持扩展功能，必然不支持1GB页
-  }
-
-  rax = 0x80000001;
-  cpuid_wrapper(&rax, &rcx, &rdx, &rbx);
-
-  // 步骤3：检查EDX[26]位（pdpe1gb标志）
-  if (rdx & (1 << 26))
-  {
-    return 1; // 支持1GB大页
-  }
-
-  return 0; // 不支持1GB大页
-}
-
-static void build_identity_pdpt(pdpt_entry_t *pdpt)
-{
-  zero_mem(pdpt, PAGE_SIZE);
-  for (int i = 0; i < 512; i++)
-  {
-    uint64_t phys_base = (uint64_t)i * 0x40000000; // 1G对齐地址
-
-    pdpt[i] = (pdpt_entry_t){
-        .present = 1,
-        .write = 1,
-        .user = 0, // 仅内核可访问
-        .pwt = 0,  // 未使用
-        .pcd = 0,  // 未使用
-        .reserved1 = 0,
-        .page_size = 1, // 启用1G大页[4,6](@ref)
-        .reserved2 = 0,
-        .pfn = phys_base >> 12, // 物理基址高40位
-        .nx = 0                 // 允许执行
-    };
-  }
-}
-
-static void set_pml4_entry(pml4_entry_t *entry, pdpt_entry_t *pdpt)
-{
-  *entry = (pml4_entry_t){
-      .present = 1,                // 页表项有效
-      .write = 1,                  // 允许读写
-      .user = 0,                   // 仅内核态可访问
-      .pwt = 0,                    // Write-Back缓存策略
-      .pcd = 0,                    // 启用缓存
-      .accessed = 0,               // 初始未访问
-      .reserved1 = 0,              // 硬件保留位（必须置0）[8]
-      .ignored = 0,                // 位8-11（系统保留，置0）
-      .pfn = (uint64_t)pdpt >> 12, // PDPT物理地址高40位
-      .available = 0,              // 系统软件保留位
-      .nx = 0                      // 允许代码执行
-  };
-}
 
 int init_vcpu_shared(vcpu_shared_t *vcpu_shared)
 {
@@ -82,53 +19,12 @@ int init_vcpu_shared(vcpu_shared_t *vcpu_shared)
   }
   init_msr_bitmap(vcpu_shared->msr_bitmap);
   msr_bitmap_set_read(vcpu_shared->msr_bitmap, MSR_IA32_FEATURE_CONTROL);
-
-  build_identity_pdpt(vcpu_shared->host_pt->identity_pdpt);
-  zero_mem(vcpu_shared->host_pt->pml4, PAGE_SIZE);
-  set_pml4_entry(vcpu_shared->host_pt->pml4, vcpu_shared->host_pt->identity_pdpt);
-
+  build_identity_pt(vcpu_shared->host_pt);
   init_ept(&vcpu_shared->ept_mgr);
 
   vcpu_shared->vcpu_num = 0;
 
   return 0;
-}
-
-static void setup_task_desc(gdt_desc128_t *desc, uint64_t tss_base)
-{
-  desc->limit_low = 103;
-  desc->base_low = tss_base & 0xFFFF;
-  desc->base_mid = (tss_base >> 16) & 0xFF;
-  desc->base_high = (tss_base >> 24) & 0xFF;
-  desc->base_upper32 = (tss_base >> 32) & 0xFFFFFFFF;
-  desc->type = 0x9;
-  desc->s = 0;
-  desc->dpl = 0;
-  desc->p = 1;
-  desc->limit_high = 0;
-  desc->avl = 0;
-  desc->l = 0;
-  desc->db = 0;
-  desc->g = 0;
-  desc->reserved = 0;
-}
-
-// 构造x86_64代码段描述符
-static void setup_code_desc(gdt_desc_t *desc)
-{
-  desc->limit_low = 0xFFFF;
-  desc->base_low = 0;
-  desc->base_mid = 0;
-  desc->type = 0xA; // 可执行，非一致，向上扩展
-  desc->s = 1;
-  desc->dpl = 0;
-  desc->p = 1;
-  desc->limit_high = 0xF;
-  desc->avl = 0;
-  desc->l = 1;
-  desc->db = 0;
-  desc->g = 1;
-  desc->base_high = 0;
 }
 
 void dump_host_state(void)
@@ -204,10 +100,8 @@ void dump_guest_state(void)
 void init_vcpu(vcpu_t *vcpu, vcpu_shared_t *shared)
 {
   vcpu->shared = shared;
-  zero_mem(vcpu->host_tss, sizeof(host_tss_t));
-  zero_mem(vcpu->host_gdt, sizeof(host_gdt_t));
-  setup_code_desc(&vcpu->host_gdt->code);
-  setup_task_desc(&vcpu->host_gdt->task, (uint64_t)(vcpu->host_tss));
+  zero_mem(vcpu->host_tss, sizeof(tss64_t));
+  build_gdt(vcpu->host_gdt, vcpu->host_tss);
   vcpu->host_stack->vcpu_pointer = (uint64_t)vcpu;
   vcpu->vcpu_id = shared->vcpu_num;
   shared->vcpu_num++;
@@ -402,6 +296,252 @@ int launch_vcpu(vcpu_t *vcpu)
   launch_vcpu_asm(vcpu);
   PRINTF("Failed to launch VCPU: %x\n", vmread(VM_INSTRUCTION_ERROR));
   return -1;
+}
+
+void dump_regs(regs_t *regs)
+{
+  PRINTF("RAX: 0x%x\n", regs->rax);
+  PRINTF("RCX: 0x%x\n", regs->rcx);
+  PRINTF("RDX: 0x%x\n", regs->rdx);
+  PRINTF("RBX: 0x%x\n", regs->rbx);
+  PRINTF("RBP: 0x%x\n", regs->rbp);
+  PRINTF("RSI: 0x%x\n", regs->rsi);
+  PRINTF("RDI: 0x%x\n", regs->rdi);
+  PRINTF("R8: 0x%x\n", regs->r8);
+  PRINTF("R9: 0x%x\n", regs->r9);
+  PRINTF("R10: 0x%x\n", regs->r10);
+  PRINTF("R11: 0x%x\n", regs->r11);
+  PRINTF("R12: 0x%x\n", regs->r12);
+  PRINTF("R13: 0x%x\n", regs->r13);
+  PRINTF("R14: 0x%x\n", regs->r14);
+  PRINTF("R15: 0x%x\n\n", regs->r15);
+}
+
+static uint64_t get_xcr_supported_bits()
+{
+  uint64_t rax = 0xd, rcx = 0, rdx = 0, rbx = 0;
+  cpuid_wrapper(&rax, &rcx, &rdx, &rbx);
+  return (rax & 0xffffffff) | (rdx << 32);
+}
+
+static uint64_t get_extended_model_id()
+{
+  uint64_t rax = 0x1, rcx = 0, rdx, rbx;
+  cpuid_wrapper(&rax, &rcx, &rdx, &rbx);
+  return (rax >> 16) & 0xf;
+}
+
+static int is_valid_msr(uint32_t index)
+{
+  if ((index <= MSR_ID_LOW_MAX) ||
+      (index >= MSR_ID_HIGH_MIN && index <= MSR_ID_HIGH_MAX))
+  {
+    return 1;
+  }
+  else
+  {
+    return 0;
+  }
+}
+
+void handle_rdmsr(regs_t *regs)
+{
+  if (!is_valid_msr(regs->rcx))
+  {
+    PRINTF("Invalid MSR access: %x\n", regs->rcx);
+    vmx_inject_gp(0);
+    return;
+  }
+  uint64_t value = read_msr(regs->rcx);
+  if (regs->rcx == MSR_IA32_FEATURE_CONTROL)
+  {
+    ia32_feature_control_register_t feature_control = {0};
+    feature_control.all = value;
+    feature_control.lock_bit = 1;
+    feature_control.enable_vmx_outside_smx = 0;
+    value = feature_control.all;
+  }
+  regs->rax = value >> 32;
+  regs->rdx = value & 0xffffffff;
+  vmx_advance_rip();
+}
+
+void handle_wrmsr(regs_t *regs)
+{
+  if (!is_valid_msr(regs->rcx))
+  {
+    PRINTF("Invalid MSR access: %x\n", regs->rcx);
+    vmx_inject_gp(0);
+    return;
+  }
+  uint64_t value = regs->rax << 32 | regs->rdx;
+  write_msr(regs->rcx, value);
+  vmx_advance_rip();
+}
+
+int is_valid_xcr(uint64_t xcr)
+{
+  uint64_t xcr_supported_bits = get_xcr_supported_bits();
+
+  if (xcr & ~xcr_supported_bits)
+  {
+    return 0;
+  }
+
+  if (!(xcr & XFEATURE_MASK_FP))
+  {
+    return 0;
+  }
+  if ((xcr & XFEATURE_MASK_YMM) && !(xcr & XFEATURE_MASK_SSE))
+  {
+    return 0;
+  }
+  if ((!(xcr & XFEATURE_MASK_BNDREGS)) !=
+      (!(xcr & XFEATURE_MASK_BNDCSR)))
+  {
+    return 0;
+  }
+  if (xcr & XFEATURE_MASK_AVX512)
+  {
+    if (!(xcr & XFEATURE_MASK_YMM))
+      return 0;
+    if ((xcr & XFEATURE_MASK_AVX512) != XFEATURE_MASK_AVX512)
+      return 0;
+  }
+
+  if ((xcr & XFEATURE_MASK_XTILE) &&
+      ((xcr & XFEATURE_MASK_XTILE) != XFEATURE_MASK_XTILE))
+    return 0;
+  return 1;
+}
+
+void handle_xsetbv(regs_t *regs)
+{
+  uint32_t index = regs->rcx;
+  uint64_t xcr = (regs->rax & 0xffffffff) | regs->rdx << 32;
+  if (index != 0)
+  {
+    vmx_inject_gp(0);
+    return;
+  }
+  if (!is_valid_xcr(xcr))
+  {
+    vmx_inject_gp(0);
+    return;
+  }
+  xsetbv(index, xcr);
+  vmx_advance_rip();
+}
+
+void handle_init(regs_t *regs)
+{
+  uint64_t extended_model_id = get_extended_model_id();
+  regs->rax = 0;
+  regs->rcx = 0;
+  regs->rdx = 0;
+  regs->rbx = 0x600 | (extended_model_id << 16);
+  regs->rbp = 0;
+  regs->rsi = 0;
+  regs->rdi = 0;
+  regs->r8 = 0;
+  regs->r9 = 0;
+  regs->r10 = 0;
+  regs->r11 = 0;
+  regs->r12 = 0;
+  regs->r13 = 0;
+  regs->r14 = 0;
+  regs->r15 = 0;
+
+  write_cr2(0);
+  write_dr0(0);
+  write_dr1(0);
+  write_dr2(0);
+  write_dr3(0);
+  write_dr6(0xffff0ff0);
+
+  uint64_t cr0 = vmread(GUEST_CR0);
+  cr0 &= CR0_CD_MASK | CR0_NW_MASK;
+  cr0 |= CR0_ET_MASK;
+  cr0 = vmx_ajust_cr0(cr0);
+  cr0 &= ~CR0_PE_MASK;
+  cr0 &= ~CR0_PG_MASK;
+  vmwrite(GUEST_CR0, cr0);
+  vmwrite(CR0_READ_SHADOW, cr0);
+
+  uint64_t cr4 = vmx_ajust_cr4(0);
+  vmwrite(GUEST_CR4, cr4);
+  vmwrite(CR4_READ_SHADOW, cr4 & ~CR4_VMXE_MASK);
+
+  vmwrite(GUEST_CR3, 0);
+  vmwrite(GUEST_DR7, 0x400);
+  vmwrite(GUEST_IA32_EFER, 0);
+
+  vmx_segment_ar_t code_ar = {0}, data_ar = {0}, ldtr_ar = {0}, task_ar = {0};
+
+  code_ar.present = data_ar.present = ldtr_ar.present = task_ar.present = 1;
+  code_ar.descriptor_type = data_ar.descriptor_type = 1;
+
+  code_ar.segment_type = SEGMENT_CODE_RX_ACCESSED;
+  data_ar.segment_type = SEGMENT_DATA_RW_ACCESSED;
+  ldtr_ar.segment_type = SEGMENT_SYSTEM_LDT;
+  task_ar.segment_type = SEGMENT_SYSTEM_32BIT_TSS_BUSY;
+
+  vmwrite(GUEST_CS_SELECTOR, 0xf000);
+  vmwrite(GUEST_CS_BASE, 0xffff0000);
+  vmwrite(GUEST_CS_LIMIT, 0xffff);
+  vmwrite(GUEST_CS_AR_BYTES, code_ar.all);
+  vmwrite(GUEST_SS_SELECTOR, 0);
+  vmwrite(GUEST_SS_BASE, 0);
+  vmwrite(GUEST_SS_LIMIT, 0xffff);
+  vmwrite(GUEST_SS_AR_BYTES, data_ar.all);
+  vmwrite(GUEST_DS_SELECTOR, 0);
+  vmwrite(GUEST_DS_BASE, 0);
+  vmwrite(GUEST_DS_LIMIT, 0xffff);
+  vmwrite(GUEST_DS_AR_BYTES, data_ar.all);
+  vmwrite(GUEST_ES_SELECTOR, 0);
+  vmwrite(GUEST_ES_BASE, 0);
+  vmwrite(GUEST_ES_LIMIT, 0xffff);
+  vmwrite(GUEST_ES_AR_BYTES, data_ar.all);
+  vmwrite(GUEST_FS_SELECTOR, 0);
+  vmwrite(GUEST_FS_BASE, 0);
+  vmwrite(GUEST_FS_LIMIT, 0xffff);
+  vmwrite(GUEST_FS_AR_BYTES, data_ar.all);
+  vmwrite(GUEST_GS_SELECTOR, 0);
+  vmwrite(GUEST_GS_BASE, 0);
+  vmwrite(GUEST_GS_LIMIT, 0xffff);
+  vmwrite(GUEST_GS_AR_BYTES, data_ar.all);
+  vmwrite(GUEST_TR_SELECTOR, 0);
+  vmwrite(GUEST_TR_BASE, 0);
+  vmwrite(GUEST_TR_LIMIT, 0xffff);
+  vmwrite(GUEST_TR_AR_BYTES, task_ar.all);
+  vmwrite(GUEST_LDTR_SELECTOR, 0);
+  vmwrite(GUEST_LDTR_BASE, 0);
+  vmwrite(GUEST_LDTR_LIMIT, 0xffff);
+  vmwrite(GUEST_LDTR_AR_BYTES, ldtr_ar.all);
+
+  vmwrite(GUEST_GDTR_BASE, 0);
+  vmwrite(GUEST_GDTR_LIMIT, 0xffff);
+  vmwrite(GUEST_IDTR_BASE, 0);
+  vmwrite(GUEST_IDTR_LIMIT, 0xffff);
+
+  vmwrite(GUEST_RFLAGS, 2);
+  vmwrite(GUEST_RIP, 0xfff0);
+  vmwrite(GUEST_RSP, 0);
+
+  vmx_guest_exit_ia32e(); // 退出IA32E
+
+  invvpid_single(vmread(VIRTUAL_PROCESSOR_ID));
+
+  vmwrite(GUEST_ACTIVITY_STATE, GUEST_ACTIVITY_WAIT_SIPI);
+}
+
+void handle_sipi()
+{
+  uint64_t vector = vmread(EXIT_QUALIFICATION);
+  vmwrite(GUEST_CS_SELECTOR, vector << 8);
+  vmwrite(GUEST_CS_BASE, vector << 12);
+  vmwrite(GUEST_RIP, 0);
+  vmwrite(GUEST_ACTIVITY_STATE, GUEST_ACTIVITY_ACTIVE);
 }
 
 void vm_exit_handler(vcpu_t *vcpu)
