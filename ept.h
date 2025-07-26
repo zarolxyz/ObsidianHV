@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include "basic_lib.h"
 
+#pragma pack(push, 1)
+
 typedef union
 {
     struct
@@ -137,6 +139,8 @@ typedef struct
     ept_pde_t pds[512][512]; // 初始化时使用2MB大页映射
     ept_pte_t pts[EPT_PT_NUM][512];
 } ept_data_t;
+
+#pragma pack(pop)
 
 typedef struct
 {

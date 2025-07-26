@@ -1,16 +1,13 @@
 #pragma once
 
 #include <stdint.h>
-#include "ia32.h"
+#include "intrin.h"
 #include "basic_lib.h"
 #include "vmx.h"
 #include "ept.h"
-#include "paging.h"
-#include "gdt.h"
+#include "hvos.h"
 
 #pragma pack(push, 1)
-
-#pragma pack(pop)
 
 typedef struct
 {
@@ -37,12 +34,13 @@ typedef struct
   uint64_t r15;
 } regs_t;
 
+#pragma pack(pop)
+
 typedef struct
 {
-  pt_data_t *host_pt;
+  hvos_shared_t hv_shared;
   msr_bitmap_t *msr_bitmap;
   ept_mgr_t ept_mgr;
-  int vcpu_num;
 } vcpu_shared_t;
 typedef struct
 {
@@ -50,12 +48,10 @@ typedef struct
   uint64_t launch_rip; // 第一次进入vmx非根模式时，rip指向这里
   uint64_t launch_rsp; // 第一次进入vmx非根模式时，rsp指向这里
   host_stack_t *host_stack;
-  gdt_data_t *host_gdt;
-  tss64_t *host_tss;
+  hvos_cpu_t hv_cpu;
   vcpu_shared_t *shared;
   vmxon_t *vmxon_region;
   vmcs_t *vmcs_region;
-  int vcpu_id;
 } vcpu_t;
 
 int init_vcpu_shared(vcpu_shared_t *vcpu_shared);

@@ -2,11 +2,6 @@
 
 #include <stdint.h>
 
-#define PAGE_SIZE 4096
-#define ALIGN_UP(val, align) (((val) + (align) - 1) & ~((align) - 1))
-#define PAGE_ALIGN_UP(val) ALIGN_UP(val, PAGE_SIZE)
-#define PAGE_SHIFT 12
-
 #ifndef NULL
 #define NULL ((void *)0)
 #endif

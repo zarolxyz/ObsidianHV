@@ -1,5 +1,7 @@
 .intel_syntax noprefix        # 使用Intel语法
 
+.section .text
+
 /* 控制寄存器 (CR0, CR2, CR3, CR4) */
 .global read_cr0
 read_cr0:

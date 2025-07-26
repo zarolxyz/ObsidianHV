@@ -1,7 +1,6 @@
 #include "vmx.h"
 #include "intrin.h"
 #include "basic_lib.h"
-#include "ia32.h"
 
 #define INVEPT_SINGLE_CONTEXT 0x00000001
 #define INVEPT_ALL_CONTEXT 0x00000002

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "basic_lib.h"
 #include <stdint.h>
+#include "intrin.h"
 
 #pragma pack(push, 1)
 

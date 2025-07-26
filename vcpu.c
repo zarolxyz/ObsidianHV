@@ -1,29 +1,20 @@
 #include "vcpu.h"
 #include "basic_lib.h"
 #include "intrin.h"
-
-#define HOST_GDT_CS 0x08
-#define HOST_GDT_TR 0x10
+#include "hvos.h"
 
 #define VCPU_VPID 1
 
 // 打印时带上VCPU编号
-#define VCPU_PRINTF(vcpu, fmt, ...) PRINTF("VCPU%d: " fmt, vcpu->vcpu_id, ##__VA_ARGS__)
+#define VCPU_PRINTF(vcpu, fmt, ...) CPU_PRINTF(&(vcpu)->hv_cpu, fmt, ##__VA_ARGS__)
 
 int init_vcpu_shared(vcpu_shared_t *vcpu_shared)
 {
-  if (!check_pdpe1gb())
-  {
-    PRINTF("CPU does not support pdpe1gb feature.\n");
+  if (init_hvos_shared_data(&vcpu_shared->hv_shared) != 0)
     return -1;
-  }
   init_msr_bitmap(vcpu_shared->msr_bitmap);
   msr_bitmap_set_read(vcpu_shared->msr_bitmap, MSR_IA32_FEATURE_CONTROL);
-  build_identity_pt(vcpu_shared->host_pt);
   init_ept(&vcpu_shared->ept_mgr);
-
-  vcpu_shared->vcpu_num = 0;
-
   return 0;
 }
 
@@ -99,12 +90,9 @@ void dump_guest_state(void)
 
 void init_vcpu(vcpu_t *vcpu, vcpu_shared_t *shared)
 {
+  init_hvos_cpu(&vcpu->hv_cpu, &shared->hv_shared);
   vcpu->shared = shared;
-  zero_mem(vcpu->host_tss, sizeof(tss64_t));
-  build_gdt(vcpu->host_gdt, vcpu->host_tss);
   vcpu->host_stack->vcpu_pointer = (uint64_t)vcpu;
-  vcpu->vcpu_id = shared->vcpu_num;
-  shared->vcpu_num++;
 }
 
 uintptr_t get_vm_exit_handler_asm();
@@ -199,10 +187,10 @@ static void setup_vmcs(vcpu_t *vcpu)
   vmwrite(GUEST_IDTR_LIMIT, idtr.limit);
 
   vmwrite(HOST_CR0, read_cr0());
-  vmwrite(HOST_CR3, (uint64_t)vcpu->shared->host_pt->pml4);
+  vmwrite(HOST_CR3, (uint64_t)vcpu->shared->hv_shared.pt->pml4);
   vmwrite(HOST_CR4, read_cr4() | CR4_OSXSAVE_MASK); // 开启OSXSAVE，以处理guest xsetbv指令
 
-  vmwrite(HOST_CS_SELECTOR, HOST_GDT_CS);
+  vmwrite(HOST_CS_SELECTOR, HV_CS);
   vmwrite(HOST_DS_SELECTOR, 0);
   vmwrite(HOST_ES_SELECTOR, 0);
   vmwrite(HOST_SS_SELECTOR, 0);
@@ -212,12 +200,12 @@ static void setup_vmcs(vcpu_t *vcpu)
   vmwrite(HOST_FS_BASE, 0);
   vmwrite(HOST_GS_BASE, 0);
 
-  vmwrite(HOST_TR_SELECTOR, HOST_GDT_TR);
+  vmwrite(HOST_TR_SELECTOR, HV_TR);
 
-  vmwrite(HOST_TR_BASE, (uint64_t)vcpu->host_tss);
+  vmwrite(HOST_TR_BASE, (uint64_t)vcpu->hv_cpu.tss);
 
-  vmwrite(HOST_GDTR_BASE, (uint64_t)vcpu->host_gdt);
-  vmwrite(HOST_IDTR_BASE, UINT64_MAX);
+  vmwrite(HOST_GDTR_BASE, (uint64_t)vcpu->hv_cpu.gdt);
+  vmwrite(HOST_IDTR_BASE, (uint64_t)vcpu->shared->hv_shared.idt);
 
   vmwrite(HOST_RSP, (uint64_t)&vcpu->host_stack->vcpu_pointer);
   vmwrite(HOST_RIP, (uint64_t)get_vm_exit_handler_asm());
